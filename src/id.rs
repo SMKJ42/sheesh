@@ -1,6 +1,6 @@
 use std::ops::Shl;
 
-use potatoe::scrypt::{OsRng, RngCore};
+use potatoe::scrypt::password_hash::rand_core::{OsRng, RngCore};
 
 pub trait IdGenerator {
     fn new_u64(&self) -> u64;
