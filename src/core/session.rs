@@ -1,6 +1,6 @@
 use std::error;
 
-use crate::{
+use super::{
     auth_token::{AuthToken, AuthTokenGenerator},
     id::IdGenerator,
 };

@@ -4,5 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-potatoe = { git = "https://github.com/SMKJ42/potatoe.git" }
 chrono = { version = "0.4.38" }
+scrypt = "0.11.0"
+
+[[example]]
+name = "basic"

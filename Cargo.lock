@@ -239,14 +239,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "potatoe"
-version = "0.1.0"
-source = "git+https://github.com/SMKJ42/potatoe.git#34ee628e8af111f1f4254f4c5bd7984612093933"
-dependencies = [
- "scrypt",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.86"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -310,7 +302,7 @@ name = "sheesh"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "potatoe",
+ "scrypt",
 ]
 
 [[package]]

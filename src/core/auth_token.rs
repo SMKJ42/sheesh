@@ -3,7 +3,7 @@ use std::{
     fmt::{self, Display},
 };
 
-use crate::id::{DefaultIdGenerator, IdGenerator};
+use super::id::{DefaultIdGenerator, IdGenerator};
 use chrono::{offset::LocalResult, DateTime, TimeDelta, Utc};
 
 pub struct AuthTokenGenerator<T>

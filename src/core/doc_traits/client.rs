@@ -1,6 +1,6 @@
 use std::error;
 
-use crate::user::{Group, PrivateUserMeta, PublicUserMeta, Role, User, UserPublic};
+use crate::core::user::{Group, PrivateUserMeta, PublicUserMeta, Role, User, UserPublic};
 
 pub trait Client {
     /// Retrieve data that is intended to be available to all users.

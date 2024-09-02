@@ -1,7 +1,7 @@
 use scrypt::password_hash::{self, rand_core, PasswordHasher, PasswordVerifier};
 
-use crate::method::PasswordMethod;
-use crate::rng::DefaultRng;
+use super::method::PasswordMethod;
+use super::rng::DefaultRng;
 
 pub struct HashBrown<T> {
     method: PasswordMethod,

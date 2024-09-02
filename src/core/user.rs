@@ -1,4 +1,4 @@
-use crate::id::IdGenerator;
+use super::id::IdGenerator;
 
 #[derive(Clone, Debug)]
 pub struct UserPublic<Pu>

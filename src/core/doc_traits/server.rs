@@ -1,6 +1,6 @@
 use std::error;
 
-use crate::{
+use crate::core::{
     auth_token::AuthToken,
     session::Session,
     user::{Group, PrivateUserMeta, PublicUserMeta, Role, User, UserPublic},
