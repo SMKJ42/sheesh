@@ -7,7 +7,7 @@ pub trait IdGenerator {
     fn new_u128(&self) -> u128;
 }
 
-pub struct DefaultIdGenerator;
+pub struct DefaultIdGenerator {}
 
 impl IdGenerator for DefaultIdGenerator {
     fn new_u128(&self) -> u128 {
@@ -22,6 +22,6 @@ impl IdGenerator for DefaultIdGenerator {
 
 impl DefaultIdGenerator {
     pub fn init() -> Self {
-        return Self;
+        return Self {};
     }
 }

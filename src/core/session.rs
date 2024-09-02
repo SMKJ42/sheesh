@@ -3,24 +3,27 @@ use std::error;
 use super::{
     auth_token::{AuthToken, AuthTokenGenerator},
     id::IdGenerator,
+    token::HashGenerator,
 };
 
-pub struct SessionManager<T>
+pub struct SessionManager<T, U>
 where
     T: IdGenerator,
+    U: HashGenerator,
 {
     id_generator: T,
-    token_generator: AuthTokenGenerator<T>,
+    token_generator: AuthTokenGenerator<T, U>,
 }
 
-impl<T> SessionManager<T>
+impl<T, U> SessionManager<T, U>
 where
     T: IdGenerator,
+    U: HashGenerator,
 {
-    pub fn init(id_generator: T, token_generator: T, ttl: i64) -> Self {
+    pub fn init(id_generator: T, token_generator: AuthTokenGenerator<T, U>) -> Self {
         return Self {
             id_generator,
-            token_generator: AuthTokenGenerator::init(ttl, token_generator),
+            token_generator,
         };
     }
 

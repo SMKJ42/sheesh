@@ -1,28 +1,43 @@
 use std::{
     error,
     fmt::{self, Display},
+    hash::Hash,
 };
 
-use super::id::{DefaultIdGenerator, IdGenerator};
+use super::{
+    id::{DefaultIdGenerator, IdGenerator},
+    token::{DefaultHashGenerator, HashGenerator},
+};
 use chrono::{offset::LocalResult, DateTime, TimeDelta, Utc};
 
-pub struct AuthTokenGenerator<T>
+pub struct AuthTokenGenerator<T, U>
 where
     T: IdGenerator,
+    U: HashGenerator,
 {
     ttl: i64,
     id_generator: T,
+    hash_generator: U,
 }
 
-impl<T: IdGenerator> AuthTokenGenerator<T> {
-    pub fn init(ttl: i64, id_generator: T) -> Self {
-        Self { ttl, id_generator }
+impl<T, U> AuthTokenGenerator<T, U>
+where
+    T: IdGenerator,
+    U: HashGenerator,
+{
+    pub fn init(id_generator: T, hash_generator: U, ttl: i64) -> Self {
+        Self {
+            ttl,
+            id_generator,
+            hash_generator,
+        }
     }
 
-    pub fn default() -> AuthTokenGenerator<DefaultIdGenerator> {
+    pub fn default() -> AuthTokenGenerator<DefaultIdGenerator, DefaultHashGenerator> {
         AuthTokenGenerator {
             ttl: 8,
-            id_generator: DefaultIdGenerator,
+            id_generator: DefaultIdGenerator::init(),
+            hash_generator: DefaultHashGenerator::init(),
         }
     }
 
