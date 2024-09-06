@@ -1,6 +1,6 @@
 use crate::db::{sqlite::SqliteDiskOpUser, DiskOp};
 
-use super::id::IdGenerator;
+use super::id::{DefaultIdGenerator, IdGenerator};
 
 // Traits that provide type safety for valid inputs.
 pub trait Role {}
@@ -66,6 +66,15 @@ where
 {
     id_generator: T,
     db_harness: V,
+}
+
+impl UserManager<DefaultIdGenerator, SqliteDiskOpUser> {
+    pub fn init_default() -> Self {
+        Self {
+            id_generator: DefaultIdGenerator {},
+            db_harness: SqliteDiskOpUser {},
+        }
+    }
 }
 
 impl<T> UserManager<T, SqliteDiskOpUser>

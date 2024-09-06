@@ -1,11 +1,14 @@
 use std::error;
 
-use crate::db::{sqlite::SqliteDiskOpSession, DiskOp};
+use crate::db::{
+    sqlite::{SqliteDiskOpSession, SqliteDiskOpToken},
+    DiskOp,
+};
 
 use super::{
     auth_token::{AuthToken, AuthTokenGenerator},
-    id::IdGenerator,
-    token::HashGenerator,
+    hash::{DefaultHashGenerator, HashGenerator},
+    id::{DefaultIdGenerator, IdGenerator},
 };
 
 pub struct SessionManager<T, U, V, X>
@@ -18,6 +21,18 @@ where
     id_generator: T,
     token_generator: AuthTokenGenerator<T, U, X>,
     db_harness: V,
+}
+
+impl
+    SessionManager<DefaultIdGenerator, DefaultHashGenerator, SqliteDiskOpSession, SqliteDiskOpToken>
+{
+    pub fn init_default() -> Self {
+        return Self {
+            id_generator: DefaultIdGenerator {},
+            token_generator: AuthTokenGenerator::init_default(),
+            db_harness: SqliteDiskOpSession {},
+        };
+    }
 }
 
 impl<T, U, X> SessionManager<T, U, SqliteDiskOpSession, X>

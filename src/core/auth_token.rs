@@ -5,7 +5,10 @@ use std::{
 
 use crate::db::{sqlite::SqliteDiskOpToken, DiskOp};
 
-use super::{id::IdGenerator, token::HashGenerator};
+use super::{
+    hash::{DefaultHashGenerator, HashGenerator},
+    id::{DefaultIdGenerator, IdGenerator},
+};
 use chrono::{offset::LocalResult, DateTime, TimeDelta, Utc};
 
 pub struct AuthTokenGenerator<T, U, V>
@@ -18,6 +21,17 @@ where
     id_generator: T,
     hash_generator: U,
     db_harness: V,
+}
+
+impl AuthTokenGenerator<DefaultIdGenerator, DefaultHashGenerator, SqliteDiskOpToken> {
+    pub fn init_default() -> Self {
+        return Self {
+            ttl: 30,
+            id_generator: DefaultIdGenerator {},
+            hash_generator: DefaultHashGenerator {},
+            db_harness: SqliteDiskOpToken {},
+        };
+    }
 }
 
 impl<T, U> AuthTokenGenerator<T, U, SqliteDiskOpToken>
@@ -71,7 +85,7 @@ impl AuthToken {
                 match expires {
                     LocalResult::Single(expires) => {
                         return Ok(AuthToken {
-                            expires: expires,
+                            expires,
                             id,
                             session_id,
                             is_valid: true,
@@ -79,7 +93,7 @@ impl AuthToken {
                     }
                     LocalResult::Ambiguous(expires, _) => {
                         return Ok(AuthToken {
-                            expires: expires,
+                            expires,
                             id,
                             session_id,
                             is_valid: true,
