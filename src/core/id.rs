@@ -7,6 +7,7 @@ pub trait IdGenerator {
     fn new_u128(&self) -> u128;
 }
 
+#[derive(Clone, Copy)]
 pub struct DefaultIdGenerator {}
 
 impl IdGenerator for DefaultIdGenerator {

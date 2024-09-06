@@ -1,5 +1,6 @@
 pub trait HashGenerator {}
 
+#[derive(Clone, Copy)]
 pub struct DefaultHashGenerator {}
 
 impl HashGenerator for DefaultHashGenerator {}

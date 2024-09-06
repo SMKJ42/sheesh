@@ -1,4 +1,12 @@
+use crate::db::{sqlite::SqliteDiskOpUser, DiskOp};
+
 use super::id::IdGenerator;
+
+// Traits that provide type safety for valid inputs.
+pub trait Role {}
+pub trait Group {}
+pub trait PublicUserMeta {}
+pub trait PrivateUserMeta {}
 
 #[derive(Clone, Debug)]
 pub struct UserPublic<Pu>
@@ -51,21 +59,32 @@ where
     }
 }
 
-pub struct UserManager<T>
+pub struct UserManager<T, V>
 where
     T: IdGenerator,
+    V: DiskOp,
 {
     id_generator: T,
+    db_harness: V,
 }
 
-impl<T> UserManager<T>
+impl<T> UserManager<T, SqliteDiskOpUser>
 where
     T: IdGenerator,
 {
     pub fn init(id_generator: T) -> Self {
-        Self { id_generator }
+        Self {
+            id_generator,
+            db_harness: SqliteDiskOpUser {},
+        }
     }
+}
 
+impl<T, V> UserManager<T, V>
+where
+    T: IdGenerator,
+    V: DiskOp,
+{
     pub fn new_user<R, G, Pu, Pr>(
         &self,
         user_name: String,
@@ -140,6 +159,14 @@ where
     pub fn is_banned(&self) -> bool {
         return self.banned;
     }
+
+    pub fn set_public_data(&mut self, public: Pu) {
+        self.public.update_public(public)
+    }
+
+    pub fn set_private_data(&mut self, private: Pr) {
+        self.private = private;
+    }
 }
 
 impl<R: Role, G: Group + PartialEq, Pu: PublicUserMeta, Pr: PrivateUserMeta> User<R, G, Pu, Pr> {
@@ -161,9 +188,3 @@ impl<R: Role, G: Group + PartialEq, Pu: PublicUserMeta, Pr: PrivateUserMeta> Use
         }
     }
 }
-
-// Traits that provide type safety for valid inputs.
-pub trait Role {}
-pub trait Group {}
-pub trait PublicUserMeta {}
-pub trait PrivateUserMeta {}

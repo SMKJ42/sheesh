@@ -8,7 +8,6 @@ use sheesh::{
 
 enum Roles {
     Admin,
-    User,
 }
 
 impl Role for Roles {}
@@ -26,19 +25,30 @@ type MyUser = User<Roles, SomeGroup, MyPublicUserMetadata, MyPrivateUserMetadata
 
 fn main() {
     let id_generator = DefaultIdGenerator::init();
+    let hash_generator = DefaultHashGenerator::init();
 
-    // this is gross...
-    let token_generator = AuthTokenGenerator::<DefaultIdGenerator, DefaultHashGenerator>::default();
-
-    let user_manager = UserManager::init(DefaultIdGenerator::init());
+    let user_manager = UserManager::init(id_generator);
+    let token_generator = AuthTokenGenerator::init(id_generator, hash_generator, 30);
     let session_manager = SessionManager::init(id_generator, token_generator);
 
-    let user: MyUser = user_manager.new_user(
+    let mut user: MyUser = user_manager.new_user(
         "test".to_string(),
         Roles::Admin,
         MyPublicUserMetadata {},
         MyPrivateUserMetadata {},
     );
 
-    session_manager.new_session(user.id);
+    let public = MyPublicUserMetadata {};
+    let private = MyPrivateUserMetadata {};
+
+    user.set_public_data(public);
+    user.set_private_data(private);
+
+    let (mut session, mut token) = session_manager.new_session(user.public().id()).unwrap();
+
+    token.invalidate();
+
+    let mut new_token = session_manager.refresh_session_token(&mut session).unwrap();
+
+    let is_valid_token = new_token.is_valid();
 }

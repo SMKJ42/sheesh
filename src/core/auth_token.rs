@@ -1,26 +1,26 @@
 use std::{
     error,
     fmt::{self, Display},
-    hash::Hash,
 };
 
-use super::{
-    id::{DefaultIdGenerator, IdGenerator},
-    token::{DefaultHashGenerator, HashGenerator},
-};
+use crate::db::{sqlite::SqliteDiskOpToken, DiskOp};
+
+use super::{id::IdGenerator, token::HashGenerator};
 use chrono::{offset::LocalResult, DateTime, TimeDelta, Utc};
 
-pub struct AuthTokenGenerator<T, U>
+pub struct AuthTokenGenerator<T, U, V>
 where
     T: IdGenerator,
     U: HashGenerator,
+    V: DiskOp,
 {
     ttl: i64,
     id_generator: T,
     hash_generator: U,
+    db_harness: V,
 }
 
-impl<T, U> AuthTokenGenerator<T, U>
+impl<T, U> AuthTokenGenerator<T, U, SqliteDiskOpToken>
 where
     T: IdGenerator,
     U: HashGenerator,
@@ -30,17 +30,17 @@ where
             ttl,
             id_generator,
             hash_generator,
+            db_harness: SqliteDiskOpToken {},
         }
     }
+}
 
-    pub fn default() -> AuthTokenGenerator<DefaultIdGenerator, DefaultHashGenerator> {
-        AuthTokenGenerator {
-            ttl: 8,
-            id_generator: DefaultIdGenerator::init(),
-            hash_generator: DefaultHashGenerator::init(),
-        }
-    }
-
+impl<T, U, V> AuthTokenGenerator<T, U, V>
+where
+    T: IdGenerator,
+    U: HashGenerator,
+    V: DiskOp,
+{
     pub fn next_token(&self, session_id: u64) -> Result<AuthToken, Box<dyn error::Error>> {
         let id = self.id_generator.new_u64();
         // we dont want to force a reattempt, leave implementation up to the developer.
@@ -49,10 +49,10 @@ where
 }
 
 pub struct AuthToken {
-    pub id: u64,
-    pub session_id: u64,
-    pub expires: DateTime<Utc>,
-    pub is_valid: bool,
+    id: u64,
+    session_id: u64,
+    expires: DateTime<Utc>,
+    is_valid: bool,
 }
 
 impl AuthToken {
@@ -111,6 +111,10 @@ impl AuthToken {
 
     pub fn invalidate(&mut self) {
         self.is_valid = false;
+    }
+
+    pub fn id(&self) -> u64 {
+        return self.id;
     }
 }
 

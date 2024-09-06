@@ -1,32 +1,47 @@
 use std::error;
 
+use crate::db::{sqlite::SqliteDiskOpSession, DiskOp};
+
 use super::{
     auth_token::{AuthToken, AuthTokenGenerator},
     id::IdGenerator,
     token::HashGenerator,
 };
 
-pub struct SessionManager<T, U>
+pub struct SessionManager<T, U, V, X>
 where
     T: IdGenerator,
     U: HashGenerator,
+    V: DiskOp,
+    X: DiskOp,
 {
     id_generator: T,
-    token_generator: AuthTokenGenerator<T, U>,
+    token_generator: AuthTokenGenerator<T, U, X>,
+    db_harness: V,
 }
 
-impl<T, U> SessionManager<T, U>
+impl<T, U, X> SessionManager<T, U, SqliteDiskOpSession, X>
 where
     T: IdGenerator,
     U: HashGenerator,
+    X: DiskOp,
 {
-    pub fn init(id_generator: T, token_generator: AuthTokenGenerator<T, U>) -> Self {
+    pub fn init(id_generator: T, token_generator: AuthTokenGenerator<T, U, X>) -> Self {
         return Self {
             id_generator,
             token_generator,
+            db_harness: SqliteDiskOpSession {},
         };
     }
+}
 
+impl<T, U, V, X> SessionManager<T, U, V, X>
+where
+    T: IdGenerator,
+    U: HashGenerator,
+    V: DiskOp,
+    X: DiskOp,
+{
     pub fn new_session(&self, user_id: u64) -> Result<(Session, AuthToken), Box<dyn error::Error>> {
         let id = self.id_generator.new_u64();
         let new_token = self.token_generator.next_token(id)?;
@@ -35,22 +50,18 @@ where
             Session {
                 id,
                 user_id,
-                current_token_id: new_token.id,
+                current_token_id: new_token.id(),
             },
             new_token,
         ));
     }
 
-    /// This function will create a new token, but it is the developer's job to invalidate the old token.
-
-    // while the package can invalidate the token for the developer, it would not enforce persisting
-    // the token's invalid state within the database. (the token would only be invalid in mem, not in the fs)
     pub fn refresh_session_token(
         &self,
         session: &mut Session,
     ) -> Result<AuthToken, Box<dyn error::Error>> {
         let new_token = self.token_generator.next_token(session.id)?;
-        session.current_token_id = new_token.id;
+        session.current_token_id = new_token.id();
 
         return Ok(new_token);
     }
