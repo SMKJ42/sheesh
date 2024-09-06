@@ -3,12 +3,12 @@ use std::{
     fmt::{self, Display},
 };
 
-use crate::db::{sqlite::SqliteDiskOpToken, DiskOp};
-
-use super::{
+use crate::{
+    db::{sqlite::SqliteDiskOpToken, DiskOp},
     hash::{DefaultHashGenerator, HashGenerator},
-    id::{DefaultIdGenerator, IdGenerator},
 };
+
+use super::id::{DefaultIdGenerator, IdGenerator};
 use chrono::{offset::LocalResult, DateTime, TimeDelta, Utc};
 
 pub struct AuthTokenGenerator<T, U, V>

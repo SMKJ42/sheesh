@@ -1,13 +1,15 @@
 use std::error;
 
-use crate::db::{
-    sqlite::{SqliteDiskOpSession, SqliteDiskOpToken},
-    DiskOp,
+use crate::{
+    db::{
+        sqlite::{SqliteDiskOpSession, SqliteDiskOpToken},
+        DiskOp,
+    },
+    hash::{DefaultHashGenerator, HashGenerator},
 };
 
 use super::{
     auth_token::{AuthToken, AuthTokenGenerator},
-    hash::{DefaultHashGenerator, HashGenerator},
     id::{DefaultIdGenerator, IdGenerator},
 };
 
