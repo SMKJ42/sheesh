@@ -1,4 +1,6 @@
-use crate::db::{sqlite::SqliteDiskOpUser, DiskOp};
+use rusqlite::Connection;
+
+use crate::harness::{sqlite::SqliteDiskOpUser, DiskOp, DiskOpUser};
 
 use super::id::{DefaultIdGenerator, IdGenerator};
 
@@ -59,35 +61,55 @@ where
     }
 }
 
+pub struct UserManagerConfig<T>
+where
+    T: IdGenerator,
+{
+    id_generator: T,
+}
+
+impl UserManagerConfig<DefaultIdGenerator> {
+    pub fn new_default() -> Self {
+        Self {
+            id_generator: DefaultIdGenerator {},
+        }
+    }
+}
+
+impl<T> UserManagerConfig<T>
+where
+    T: IdGenerator + Copy,
+{
+    pub fn init<U: DiskOp>(&self, connection: U) -> UserManager<T, U> {
+        UserManager {
+            id_generator: self.id_generator,
+            connection,
+        }
+    }
+}
+
 pub struct UserManager<T, V>
 where
     T: IdGenerator,
     V: DiskOp,
 {
     id_generator: T,
-    db_harness: V,
+    connection: V,
 }
 
-impl UserManager<DefaultIdGenerator, SqliteDiskOpUser> {
-    pub fn init_default() -> Self {
-        Self {
-            id_generator: DefaultIdGenerator {},
-            db_harness: SqliteDiskOpUser {},
-        }
-    }
-}
+impl UserManager<DefaultIdGenerator, SqliteDiskOpUser> {}
 
-impl<T> UserManager<T, SqliteDiskOpUser>
-where
-    T: IdGenerator,
-{
-    pub fn init(id_generator: T) -> Self {
-        Self {
-            id_generator,
-            db_harness: SqliteDiskOpUser {},
-        }
-    }
-}
+// impl<T> UserManager<T, SqliteDiskOpUser>
+// where
+//     T: IdGenerator,
+// {
+//     pub fn init<V>(id_generator: T) -> Self {
+//         Self {
+//             id_generator,
+//             db_harness: ,
+//         }
+//     }
+// }
 
 impl<T, V> UserManager<T, V>
 where
@@ -175,6 +197,10 @@ where
 
     pub fn set_private_data(&mut self, private: Pr) {
         self.private = private;
+    }
+
+    pub fn groups(&self) -> &Vec<G> {
+        return &self.groups;
     }
 }
 

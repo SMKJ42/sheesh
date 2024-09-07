@@ -5,9 +5,6 @@ pub mod rng;
 pub mod error;
 pub use hashbrown::*;
 
-/// re-export
-pub use scrypt;
-
 pub trait HashGenerator {}
 
 #[derive(Clone, Copy)]

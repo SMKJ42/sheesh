@@ -4,14 +4,49 @@ use std::{
 };
 
 use crate::{
-    db::{sqlite::SqliteDiskOpToken, DiskOp},
+    harness::{sqlite::SqliteDiskOpToken, DiskOp},
     hash::{DefaultHashGenerator, HashGenerator},
 };
 
 use super::id::{DefaultIdGenerator, IdGenerator};
 use chrono::{offset::LocalResult, DateTime, TimeDelta, Utc};
 
-pub struct AuthTokenGenerator<T, U, V>
+pub struct AuthTokenManagerConfig<T, U>
+where
+    T: IdGenerator,
+    U: HashGenerator,
+{
+    ttl: i64,
+    id_generator: T,
+    hash_generator: U,
+}
+
+impl AuthTokenManagerConfig<DefaultIdGenerator, DefaultHashGenerator> {
+    pub fn new_default() -> Self {
+        return Self {
+            ttl: 30,
+            id_generator: DefaultIdGenerator {},
+            hash_generator: DefaultHashGenerator {},
+        };
+    }
+}
+
+impl<T, U> AuthTokenManagerConfig<T, U>
+where
+    T: IdGenerator + Copy,
+    U: HashGenerator + Copy,
+{
+    pub fn init<V: DiskOp>(&self, connection: V) -> AuthTokenManager<T, U, V> {
+        AuthTokenManager {
+            ttl: self.ttl,
+            id_generator: self.id_generator,
+            hash_generator: self.hash_generator,
+            connection,
+        }
+    }
+}
+
+pub struct AuthTokenManager<T, U, V>
 where
     T: IdGenerator,
     U: HashGenerator,
@@ -20,36 +55,17 @@ where
     ttl: i64,
     id_generator: T,
     hash_generator: U,
-    db_harness: V,
+    pub connection: V,
 }
 
-impl AuthTokenGenerator<DefaultIdGenerator, DefaultHashGenerator, SqliteDiskOpToken> {
-    pub fn init_default() -> Self {
-        return Self {
-            ttl: 30,
-            id_generator: DefaultIdGenerator {},
-            hash_generator: DefaultHashGenerator {},
-            db_harness: SqliteDiskOpToken {},
-        };
-    }
-}
-
-impl<T, U> AuthTokenGenerator<T, U, SqliteDiskOpToken>
+impl<T, U> AuthTokenManager<T, U, SqliteDiskOpToken>
 where
     T: IdGenerator,
     U: HashGenerator,
 {
-    pub fn init(id_generator: T, hash_generator: U, ttl: i64) -> Self {
-        Self {
-            ttl,
-            id_generator,
-            hash_generator,
-            db_harness: SqliteDiskOpToken {},
-        }
-    }
 }
 
-impl<T, U, V> AuthTokenGenerator<T, U, V>
+impl<T, U, V> AuthTokenManager<T, U, V>
 where
     T: IdGenerator,
     U: HashGenerator,
@@ -57,8 +73,11 @@ where
 {
     pub fn next_token(&self, session_id: u64) -> Result<AuthToken, Box<dyn error::Error>> {
         let id = self.id_generator.new_u64();
-        // we dont want to force a reattempt, leave implementation up to the developer.
-        return AuthToken::new(id, session_id, self.ttl);
+
+        let token = AuthToken::new(id, session_id, self.ttl)?;
+        self.connection.insert(&token)?;
+
+        return Ok(token);
     }
 }
 
@@ -70,7 +89,7 @@ pub struct AuthToken {
 }
 
 impl AuthToken {
-    /// AuthToken::new() should only be called from AuthTokenGenerator.
+    /// AuthToken::new() should only be called from AuthTokenManager.
     fn new(id: u64, session_id: u64, ttl: i64) -> Result<Self, Box<dyn error::Error>> {
         let now = Utc::now();
         let time_delta = TimeDelta::minutes(ttl);

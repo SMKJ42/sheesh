@@ -1,4 +1,4 @@
-use scrypt::password_hash::rand_core::{self, RngCore};
+use scrypt::password_hash::rand_core;
 
 #[derive(Clone)]
 pub struct DefaultRng;

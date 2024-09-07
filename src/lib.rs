@@ -1,7 +1,8 @@
 mod core;
 
 pub mod hash;
-
 pub use core::*;
+pub mod harness;
 
-pub mod db;
+// re-export
+pub use scrypt;

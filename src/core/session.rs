@@ -1,7 +1,7 @@
 use std::error;
 
 use crate::{
-    db::{
+    harness::{
         sqlite::{SqliteDiskOpSession, SqliteDiskOpToken},
         DiskOp,
     },
@@ -9,9 +9,45 @@ use crate::{
 };
 
 use super::{
-    auth_token::{AuthToken, AuthTokenGenerator},
+    auth_token::{AuthToken, AuthTokenManager, AuthTokenManagerConfig},
     id::{DefaultIdGenerator, IdGenerator},
 };
+
+pub struct SessionManagerConfig<T, U>
+where
+    T: IdGenerator,
+    U: HashGenerator,
+{
+    id_generator: T,
+    token_generator_config: AuthTokenManagerConfig<T, U>,
+}
+
+impl SessionManagerConfig<DefaultIdGenerator, DefaultHashGenerator> {
+    pub fn new_default() -> Self {
+        return Self {
+            id_generator: DefaultIdGenerator {},
+            token_generator_config: AuthTokenManagerConfig::new_default(),
+        };
+    }
+}
+
+impl<T, U> SessionManagerConfig<T, U>
+where
+    T: IdGenerator + Copy,
+    U: HashGenerator + Copy,
+{
+    pub fn init<V: DiskOp, X: DiskOp>(
+        &self,
+        session_harness: V,
+        token_harness: X,
+    ) -> SessionManager<T, U, V, X> {
+        return SessionManager {
+            id_generator: self.id_generator,
+            token_generator: self.token_generator_config.init(token_harness),
+            db_harness: session_harness,
+        };
+    }
+}
 
 pub struct SessionManager<T, U, V, X>
 where
@@ -21,20 +57,13 @@ where
     X: DiskOp,
 {
     id_generator: T,
-    token_generator: AuthTokenGenerator<T, U, X>,
+    token_generator: AuthTokenManager<T, U, X>,
     db_harness: V,
 }
 
 impl
     SessionManager<DefaultIdGenerator, DefaultHashGenerator, SqliteDiskOpSession, SqliteDiskOpToken>
 {
-    pub fn init_default() -> Self {
-        return Self {
-            id_generator: DefaultIdGenerator {},
-            token_generator: AuthTokenGenerator::init_default(),
-            db_harness: SqliteDiskOpSession {},
-        };
-    }
 }
 
 impl<T, U, X> SessionManager<T, U, SqliteDiskOpSession, X>
@@ -43,13 +72,6 @@ where
     U: HashGenerator,
     X: DiskOp,
 {
-    pub fn init(id_generator: T, token_generator: AuthTokenGenerator<T, U, X>) -> Self {
-        return Self {
-            id_generator,
-            token_generator,
-            db_harness: SqliteDiskOpSession {},
-        };
-    }
 }
 
 impl<T, U, V, X> SessionManager<T, U, V, X>
@@ -63,14 +85,15 @@ where
         let id = self.id_generator.new_u64();
         let new_token = self.token_generator.next_token(id)?;
 
-        return Ok((
-            Session {
-                id,
-                user_id,
-                current_token_id: new_token.id(),
-            },
-            new_token,
-        ));
+        let session = Session {
+            id,
+            user_id,
+            current_token_id: new_token.id(),
+        };
+
+        self.db_harness.insert(&session)?;
+
+        return Ok((session, new_token));
     }
 
     pub fn refresh_session_token(

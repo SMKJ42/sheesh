@@ -37,10 +37,10 @@ where
 }
 
 pub trait DiskOp {
-    fn read(&self) -> Result<(), Box<dyn error::Error>>;
-    fn update(&self) -> Result<(), Box<dyn error::Error>>;
-    fn insert(&self) -> Result<(), Box<dyn error::Error>>;
-    fn delete(&self) -> Result<(), Box<dyn error::Error>>;
+    fn read<T>(&self, item: T) -> Result<(), Box<dyn error::Error>>;
+    fn update<T>(&self, item: T) -> Result<(), Box<dyn error::Error>>;
+    fn insert<T>(&self, item: T) -> Result<(), Box<dyn error::Error>>;
+    fn delete<T>(&self, item: T) -> Result<(), Box<dyn error::Error>>;
 }
 
 pub trait DiskOpUser {
