@@ -1,6 +1,4 @@
-use rusqlite::Connection;
-
-use crate::harness::{sqlite::SqliteDiskOpUser, DiskOp, DiskOpUser};
+use crate::harness::{sqlite::SqliteDiskOpUser, DiskOp};
 
 use super::id::{DefaultIdGenerator, IdGenerator};
 
@@ -80,10 +78,10 @@ impl<T> UserManagerConfig<T>
 where
     T: IdGenerator + Copy,
 {
-    pub fn init<U: DiskOp>(&self, connection: U) -> UserManager<T, U> {
+    pub fn init<U: DiskOp>(&self, harness: U) -> UserManager<T, U> {
         UserManager {
             id_generator: self.id_generator,
-            connection,
+            harness,
         }
     }
 }
@@ -94,22 +92,10 @@ where
     V: DiskOp,
 {
     id_generator: T,
-    connection: V,
+    harness: V,
 }
 
 impl UserManager<DefaultIdGenerator, SqliteDiskOpUser> {}
-
-// impl<T> UserManager<T, SqliteDiskOpUser>
-// where
-//     T: IdGenerator,
-// {
-//     pub fn init<V>(id_generator: T) -> Self {
-//         Self {
-//             id_generator,
-//             db_harness: ,
-//         }
-//     }
-// }
 
 impl<T, V> UserManager<T, V>
 where

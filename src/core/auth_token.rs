@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    harness::{sqlite::SqliteDiskOpToken, DiskOp},
+    harness::{sqlite::SqliteDiskOpToken, DiskOp, IntoRow},
     hash::{DefaultHashGenerator, HashGenerator},
 };
 
@@ -19,6 +19,7 @@ where
     ttl: i64,
     id_generator: T,
     hash_generator: U,
+    fields: Vec<String>,
 }
 
 impl AuthTokenManagerConfig<DefaultIdGenerator, DefaultHashGenerator> {
@@ -27,6 +28,12 @@ impl AuthTokenManagerConfig<DefaultIdGenerator, DefaultHashGenerator> {
             ttl: 30,
             id_generator: DefaultIdGenerator {},
             hash_generator: DefaultHashGenerator {},
+            fields: vec![
+                "id".to_string(),
+                "token".to_string(),
+                "user_id".to_string(),
+                "expires".to_string(),
+            ],
         };
     }
 }
@@ -36,12 +43,13 @@ where
     T: IdGenerator + Copy,
     U: HashGenerator + Copy,
 {
-    pub fn init<V: DiskOp>(&self, connection: V) -> AuthTokenManager<T, U, V> {
+    pub fn init<V: DiskOp>(&self, harness: V) -> AuthTokenManager<T, U, V> {
         AuthTokenManager {
             ttl: self.ttl,
             id_generator: self.id_generator,
             hash_generator: self.hash_generator,
-            connection,
+            fields: self.fields.to_owned(),
+            harness,
         }
     }
 }
@@ -55,7 +63,8 @@ where
     ttl: i64,
     id_generator: T,
     hash_generator: U,
-    pub connection: V,
+    fields: Vec<String>,
+    pub harness: V,
 }
 
 impl<T, U> AuthTokenManager<T, U, SqliteDiskOpToken>
@@ -75,17 +84,29 @@ where
         let id = self.id_generator.new_u64();
 
         let token = AuthToken::new(id, session_id, self.ttl)?;
-        self.connection.insert(&token)?;
+        self.harness.insert(&token, &self.fields)?;
 
         return Ok(token);
     }
 }
 
+#[derive(Clone, Debug, Copy)]
 pub struct AuthToken {
     id: u64,
     session_id: u64,
     expires: DateTime<Utc>,
     is_valid: bool,
+}
+
+impl IntoRow for &AuthToken {
+    fn into_row(&self) -> Vec<String> {
+        return vec![
+            self.id.to_string(),
+            self.session_id.to_string(),
+            self.expires.to_string(),
+            self.is_valid.to_string(),
+        ];
+    }
 }
 
 impl AuthToken {

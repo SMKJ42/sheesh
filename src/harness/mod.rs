@@ -2,7 +2,7 @@ pub mod sqlite;
 // mod postgresql;
 // mod mysql;
 
-use std::error;
+use std::{error, fmt::Debug};
 
 pub enum Db {
     MySql,
@@ -37,11 +37,33 @@ where
 }
 
 pub trait DiskOp {
-    fn read<T>(&self, item: T) -> Result<(), Box<dyn error::Error>>;
-    fn update<T>(&self, item: T) -> Result<(), Box<dyn error::Error>>;
-    fn insert<T>(&self, item: T) -> Result<(), Box<dyn error::Error>>;
-    fn delete<T>(&self, item: T) -> Result<(), Box<dyn error::Error>>;
+    fn read<T: IntoRow + Debug>(
+        &self,
+        item: T,
+        cols: &Vec<String>,
+    ) -> Result<(), Box<dyn error::Error>>;
+    fn update<T: IntoRow + Debug>(
+        &self,
+        item: T,
+        cols: &Vec<String>,
+    ) -> Result<(), Box<dyn error::Error>>;
+    fn insert<T: IntoRow + Debug>(
+        &self,
+        item: T,
+        cols: &Vec<String>,
+    ) -> Result<(), Box<dyn error::Error>>;
+    fn delete<T: IntoRow + Debug>(
+        &self,
+        item: T,
+        cols: &Vec<String>,
+    ) -> Result<(), Box<dyn error::Error>>;
+    fn create_table(&self, sql_string: Option<String>) -> Result<(), Box<dyn error::Error>>;
 }
+
+pub trait IntoRow {
+    fn into_row(&self) -> Vec<String>;
+}
+pub trait IntoCols {}
 
 pub trait DiskOpUser {
     fn write_role(&self) -> Result<(), Box<dyn error::Error>>;
@@ -58,4 +80,24 @@ pub trait DiskOpSession {
 
 pub trait DiskOpToken {
     // TODO:
+}
+
+pub fn repeat_vars(count: usize) -> String {
+    assert_ne!(count, 0);
+    let mut s = "?,".repeat(count);
+    // Remove trailing comma
+    s.pop();
+    s
+}
+
+pub fn repeat_fields(cols: Vec<String>) -> String {
+    println!("cols: {:?}", cols);
+
+    let mut fields = String::new();
+    for i in 0..cols.len() - 1 {
+        fields.extend([&cols[i], ", "]);
+    }
+    fields += &cols[cols.len() - 1];
+
+    return fields;
 }

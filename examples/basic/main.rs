@@ -1,9 +1,14 @@
-use rusqlite::Connection;
 use sheesh::{
     harness::sqlite::{SqliteDiskOpSession, SqliteDiskOpToken, SqliteDiskOpUser},
-    session::{SessionManager, SessionManagerConfig},
-    user::{Group, PrivateUserMeta, PublicUserMeta, Role, User, UserManager, UserManagerConfig},
+    session::SessionManagerConfig,
+    user::{Group, PrivateUserMeta, PublicUserMeta, Role, User, UserManagerConfig},
 };
+
+extern crate r2d2;
+extern crate r2d2_sqlite;
+extern crate rusqlite;
+
+use r2d2_sqlite::SqliteConnectionManager;
 
 enum Roles {
     Admin,
@@ -23,13 +28,14 @@ impl Group for SomeGroup {}
 type MyUser = User<Roles, SomeGroup, MyPublicUserMetadata, MyPrivateUserMetadata>;
 
 fn main() {
-    let connection: Connection = Connection::open_in_memory().unwrap();
+    let conn_manager = SqliteConnectionManager::file("sqlite.db");
+    let pool = r2d2::Pool::new(conn_manager).unwrap();
 
-    let user_manager = UserManagerConfig::new_default().init(SqliteDiskOpUser::new(connection));
+    let user_manager = UserManagerConfig::new_default().init(SqliteDiskOpUser::new(pool.clone()));
 
     let session_manager = SessionManagerConfig::new_default().init(
-        SqliteDiskOpSession::new(connection),
-        SqliteDiskOpToken::new(connection),
+        SqliteDiskOpSession::new(pool.clone()),
+        SqliteDiskOpToken::new(pool),
     );
 
     let mut i = 0;

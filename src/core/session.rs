@@ -3,7 +3,7 @@ use std::error;
 use crate::{
     harness::{
         sqlite::{SqliteDiskOpSession, SqliteDiskOpToken},
-        DiskOp,
+        DiskOp, IntoRow,
     },
     hash::{DefaultHashGenerator, HashGenerator},
 };
@@ -20,6 +20,7 @@ where
 {
     id_generator: T,
     token_generator_config: AuthTokenManagerConfig<T, U>,
+    fields: Vec<String>,
 }
 
 impl SessionManagerConfig<DefaultIdGenerator, DefaultHashGenerator> {
@@ -27,7 +28,17 @@ impl SessionManagerConfig<DefaultIdGenerator, DefaultHashGenerator> {
         return Self {
             id_generator: DefaultIdGenerator {},
             token_generator_config: AuthTokenManagerConfig::new_default(),
+            fields: vec![
+                "id".to_string(),
+                "user_id".to_string(),
+                "expires".to_string(),
+                "refresh_token".to_string(),
+            ],
         };
+    }
+
+    pub fn with_fields(&mut self, fields: Vec<String>) {
+        self.fields.extend(fields);
     }
 }
 
@@ -44,7 +55,8 @@ where
         return SessionManager {
             id_generator: self.id_generator,
             token_generator: self.token_generator_config.init(token_harness),
-            db_harness: session_harness,
+            harness: session_harness,
+            fields: self.fields.to_owned(),
         };
     }
 }
@@ -58,7 +70,8 @@ where
 {
     id_generator: T,
     token_generator: AuthTokenManager<T, U, X>,
-    db_harness: V,
+    fields: Vec<String>,
+    harness: V,
 }
 
 impl
@@ -91,7 +104,7 @@ where
             current_token_id: new_token.id(),
         };
 
-        self.db_harness.insert(&session)?;
+        self.harness.insert(&session, &self.fields)?;
 
         return Ok((session, new_token));
     }
@@ -107,10 +120,21 @@ where
     }
 }
 
+#[derive(Clone, Copy, Debug)]
 pub struct Session {
     id: u64,
     user_id: u64,
     current_token_id: u64,
+}
+
+impl IntoRow for &Session {
+    fn into_row(&self) -> Vec<String> {
+        return vec![
+            self.id.to_string(),
+            self.user_id.to_string(),
+            self.current_token_id.to_string(),
+        ];
+    }
 }
 
 /// Session
