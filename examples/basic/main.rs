@@ -28,7 +28,7 @@ impl Group for SomeGroup {}
 type MyUser = User<Roles, SomeGroup, MyPublicUserMetadata, MyPrivateUserMetadata>;
 
 fn main() {
-    let conn_manager = SqliteConnectionManager::file("sqlite.db");
+    let conn_manager = SqliteConnectionManager::file("example_db/sqlite.db");
     let pool = r2d2::Pool::new(conn_manager).unwrap();
 
     let user_manager = UserManagerConfig::new_default().init(SqliteDiskOpUser::new(pool.clone()));
