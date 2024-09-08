@@ -1,7 +1,9 @@
+use std::error;
+
 use sheesh::{
     harness::{
         sqlite::{SqliteDiskOpSession, SqliteDiskOpToken, SqliteDiskOpUser},
-        DiskOp,
+        DiskOp, DiskOpManager,
     },
     session::SessionManagerConfig,
     user::{Group, PrivateUserMeta, PublicUserMeta, Role, User, UserManagerConfig},
@@ -30,40 +32,31 @@ impl Group for SomeGroup {}
 
 type MyUser = User<Roles, SomeGroup, MyPublicUserMetadata, MyPrivateUserMetadata>;
 
-struct DiskManager {
-    user: SqliteDiskOpUser,
-    session: SqliteDiskOpSession,
-    token: SqliteDiskOpToken,
-}
-
 fn main() {
+    // establish db connection.
     let conn_manager = SqliteConnectionManager::file("example_db/sqlite.db");
     let pool = r2d2::Pool::new(conn_manager).unwrap();
 
-    let disk_manager = DiskManager {
-        user: SqliteDiskOpUser::new(pool.clone()),
-        session: SqliteDiskOpSession::new(pool.clone()),
-        token: SqliteDiskOpToken::new(pool.clone()),
-    };
+    // initalize db harness. if you would like to see how to implement your own, look inside the harness modules.
+    let disk_manager = DiskOpManager::new_sqlite(pool);
+    disk_manager.init_tables().unwrap();
 
-    disk_manager.token.create_table(None).unwrap();
-    disk_manager.session.create_table(None).unwrap();
-    disk_manager.user.create_table(None).unwrap();
-
+    // provide db harness to function interfaces.
     let user_manager = UserManagerConfig::new_default().init(disk_manager.user);
-
     let session_manager =
         SessionManagerConfig::new_default().init(disk_manager.session, disk_manager.token);
 
     let mut i = 0;
 
     loop {
-        let mut user: MyUser = user_manager.new_user(
-            "test".to_string(),
-            Roles::Admin,
-            MyPublicUserMetadata {},
-            MyPrivateUserMetadata {},
-        );
+        let mut user: MyUser = user_manager
+            .new_user(
+                "test".to_string(),
+                Roles::Admin,
+                MyPublicUserMetadata {},
+                MyPrivateUserMetadata {},
+            )
+            .unwrap();
 
         let public = MyPublicUserMetadata {};
         let private = MyPrivateUserMetadata {};

@@ -4,6 +4,10 @@ pub mod sqlite;
 
 use std::error;
 
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
+use sqlite::{SqliteDiskOpSession, SqliteDiskOpToken, SqliteDiskOpUser};
+
 pub enum Db {
     MySql,
     Postgresql,
@@ -85,4 +89,47 @@ pub fn repeat_fields(cols: Vec<String>) -> String {
     fields += &cols[cols.len() - 1];
 
     return fields;
+}
+
+pub struct DiskOpManager<T, U, V>
+where
+    T: DiskOp,
+    U: DiskOp,
+    V: DiskOp,
+{
+    pub user: T,
+    pub session: U,
+    pub token: V,
+}
+
+impl<T, U, V> DiskOpManager<T, U, V>
+where
+    T: DiskOp,
+    U: DiskOp,
+    V: DiskOp,
+{
+    pub fn new_sqlite(
+        pool: Pool<SqliteConnectionManager>,
+    ) -> DiskOpManager<SqliteDiskOpUser, SqliteDiskOpSession, SqliteDiskOpToken> {
+        return DiskOpManager {
+            user: SqliteDiskOpUser::new(pool.clone()),
+            session: SqliteDiskOpSession::new(pool.clone()),
+            token: SqliteDiskOpToken::new(pool),
+        };
+    }
+
+    pub fn new_custom(user: T, session: U, token: V) -> Self {
+        return Self {
+            user,
+            session,
+            token,
+        };
+    }
+
+    pub fn init_tables(&self) -> Result<(), Box<dyn error::Error>> {
+        self.token.create_table(None)?;
+        self.session.create_table(None)?;
+        self.user.create_table(None)?;
+        return Ok(());
+    }
 }
