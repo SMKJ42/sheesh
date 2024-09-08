@@ -42,24 +42,28 @@ impl SqliteDiskOpUser {
 impl DiskOp for SqliteDiskOpUser {
     fn delete<User>(
         &self,
-        user: User,
+        user: &User,
         cols: &Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         unimplemented!()
     }
     fn insert<User>(
         &self,
-        user: User,
+        user: &User,
         cols: &Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         unimplemented!()
     }
-    fn read<User>(&self, user: User, cols: &Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+    fn read<User>(
+        &self,
+        user: &User,
+        cols: &Vec<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         unimplemented!()
     }
     fn update<User>(
         &self,
-        user: User,
+        user: &User,
         cols: &Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         unimplemented!()
@@ -69,7 +73,34 @@ impl DiskOp for SqliteDiskOpUser {
         &self,
         sql_string: Option<String>,
     ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-        unimplemented!()
+        let default_vals = format!(
+            "CREATE TABLE IF NOT EXISTS \"users\" (
+            username STRING,
+            session_id INTEGER,
+            id STRING,
+            role STRING,
+            groups STRING,
+            ban TINYINT,
+            FOREIGN KEY(session_id) REFERENCES session(id)
+            "
+        );
+
+        match sql_string {
+            Some(string) => {
+                self.connection
+                    .get()?
+                    .prepare(format!("{},{})", default_vals, string).as_str())?
+                    .execute([])?;
+            }
+            None => {
+                self.connection
+                    .get()?
+                    .prepare(format!("{})", default_vals).as_str())?
+                    .execute([])?;
+            }
+        };
+
+        return Ok(());
     }
 }
 
@@ -86,28 +117,28 @@ impl SqliteDiskOpSession {
 impl DiskOp for SqliteDiskOpSession {
     fn delete<Session>(
         &self,
-        session: Session,
+        session: &Session,
         cols: &Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         unimplemented!()
     }
     fn insert<Session>(
         &self,
-        session: Session,
+        session: &Session,
         cols: &Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         unimplemented!()
     }
     fn read<Session>(
         &self,
-        session: Session,
+        session: &Session,
         cols: &Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         unimplemented!()
     }
     fn update<Session>(
         &self,
-        session: Session,
+        session: &Session,
         cols: &Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         unimplemented!()
@@ -117,7 +148,34 @@ impl DiskOp for SqliteDiskOpSession {
         &self,
         sql_string: Option<String>,
     ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-        unimplemented!()
+        let default_vals = format!(
+            "CREATE TABLE IF NOT EXISTS \"sessions\" (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER,
+            refresh_token INTEGER,
+            auth_token INTEGER,
+            expires DATETIME,
+            FOREIGN KEY(user_id) REFERENCES user(id),
+            FOREIGN KEY(refresh_token) REFERENCES token(id)
+            "
+        );
+
+        match sql_string {
+            Some(string) => {
+                self.connection
+                    .get()?
+                    .prepare(format!("{},{})", default_vals, string).as_str())?
+                    .execute([])?;
+            }
+            None => {
+                self.connection
+                    .get()?
+                    .prepare(format!("{})", default_vals).as_str())?
+                    .execute([])?;
+            }
+        };
+
+        return Ok(());
     }
 }
 
@@ -132,17 +190,17 @@ impl SqliteDiskOpToken {
 }
 
 impl DiskOp for SqliteDiskOpToken {
-    fn delete<Token: IntoRow + Debug>(
+    fn delete<Token: IntoRow>(
         &self,
-        token: Token,
+        token: &Token,
         cols: &Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         unimplemented!()
     }
 
-    fn insert<Token: IntoRow + Debug>(
+    fn insert<Token: IntoRow>(
         &self,
-        token: Token,
+        token: &Token,
         cols: &Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let vars = repeat_vars(cols.len());
@@ -155,16 +213,16 @@ impl DiskOp for SqliteDiskOpToken {
 
         Ok(())
     }
-    fn read<Token: IntoRow + Debug>(
+    fn read<Token: IntoRow>(
         &self,
-        token: Token,
+        token: &Token,
         cols: &Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         unimplemented!()
     }
-    fn update<Token: IntoRow + Debug>(
+    fn update<Token: IntoRow>(
         &self,
-        token: Token,
+        token: &Token,
         cols: &Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         unimplemented!()
@@ -174,11 +232,9 @@ impl DiskOp for SqliteDiskOpToken {
         // TODO: finish initializing the table, will panic as of now
         let default_vals = format!(
             "CREATE TABLE IF NOT EXISTS \"tokens\" (
-            id INTEGER PRIMARY KEY
-
-            token: String
-            user_id: String
-            expires: DateTime
+            id INTEGER PRIMARY KEY,
+            token STRING,
+            expires DATETIME
             "
         );
 
@@ -186,12 +242,14 @@ impl DiskOp for SqliteDiskOpToken {
             Some(string) => {
                 self.connection
                     .get()?
-                    .prepare(format!("{},{})", default_vals, string).as_str())?;
+                    .prepare(format!("{},{})", default_vals, string).as_str())?
+                    .execute([])?;
             }
             None => {
                 self.connection
                     .get()?
-                    .prepare(format!("{})", default_vals).as_str())?;
+                    .prepare(format!("{})", default_vals).as_str())?
+                    .execute([])?;
             }
         };
 

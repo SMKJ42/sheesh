@@ -98,7 +98,7 @@ pub struct AuthToken {
     is_valid: bool,
 }
 
-impl IntoRow for &AuthToken {
+impl IntoRow for AuthToken {
     fn into_row(&self) -> Vec<String> {
         return vec![
             self.id.to_string(),

@@ -2,7 +2,7 @@ pub mod sqlite;
 // mod postgresql;
 // mod mysql;
 
-use std::{error, fmt::Debug};
+use std::error;
 
 pub enum Db {
     MySql,
@@ -37,26 +37,13 @@ where
 }
 
 pub trait DiskOp {
-    fn read<T: IntoRow + Debug>(
-        &self,
-        item: T,
-        cols: &Vec<String>,
-    ) -> Result<(), Box<dyn error::Error>>;
-    fn update<T: IntoRow + Debug>(
-        &self,
-        item: T,
-        cols: &Vec<String>,
-    ) -> Result<(), Box<dyn error::Error>>;
-    fn insert<T: IntoRow + Debug>(
-        &self,
-        item: T,
-        cols: &Vec<String>,
-    ) -> Result<(), Box<dyn error::Error>>;
-    fn delete<T: IntoRow + Debug>(
-        &self,
-        item: T,
-        cols: &Vec<String>,
-    ) -> Result<(), Box<dyn error::Error>>;
+    fn read<T: IntoRow>(&self, item: &T, cols: &Vec<String>) -> Result<(), Box<dyn error::Error>>;
+    fn update<T: IntoRow>(&self, item: &T, cols: &Vec<String>)
+        -> Result<(), Box<dyn error::Error>>;
+    fn insert<T: IntoRow>(&self, item: &T, cols: &Vec<String>)
+        -> Result<(), Box<dyn error::Error>>;
+    fn delete<T: IntoRow>(&self, item: &T, cols: &Vec<String>)
+        -> Result<(), Box<dyn error::Error>>;
     fn create_table(&self, sql_string: Option<String>) -> Result<(), Box<dyn error::Error>>;
 }
 
@@ -91,8 +78,6 @@ pub fn repeat_vars(count: usize) -> String {
 }
 
 pub fn repeat_fields(cols: Vec<String>) -> String {
-    println!("cols: {:?}", cols);
-
     let mut fields = String::new();
     for i in 0..cols.len() - 1 {
         fields.extend([&cols[i], ", "]);

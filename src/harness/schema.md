@@ -1,23 +1,27 @@
-# User
+### The following SQL statments are the default SQL statements used when no extra fields are provided.
 
-username: String
-id: String
-role:
-group(s):
-ban: bool
-session: Option(session_id)
-id_token: Option(token_id)
+## User
 
-# Session
+username STRING,
+session_id INTEGER,
+id STRING,
+role STRING,
+groups STRING,
+ban TINYINT,
+FOREIGN KEY(session_id) REFERENCES session(id)
 
-id: i64 @unique
-user_id: String
-expires: DateTime
-refresh_token: Option(token_id)
+## Session
 
-# Token
+id INTEGER PRIMARY KEY,
+user_id INTEGER,
+refresh_token INTEGER,
+auth_token INTEGER,
+expires DATETIME,
+FOREIGN KEY(user_id) REFERENCES user(id),
+FOREIGN KEY(refresh_token) REFERENCES token(id)
 
-id: i64 @unique
-token: String
-user_id: String
-expires: DateTime
+## Token
+
+id INTEGER PRIMARY KEY,
+token STRING,
+expires DATETIME

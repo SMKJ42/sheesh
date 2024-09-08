@@ -1,5 +1,8 @@
 use sheesh::{
-    harness::sqlite::{SqliteDiskOpSession, SqliteDiskOpToken, SqliteDiskOpUser},
+    harness::{
+        sqlite::{SqliteDiskOpSession, SqliteDiskOpToken, SqliteDiskOpUser},
+        DiskOp,
+    },
     session::SessionManagerConfig,
     user::{Group, PrivateUserMeta, PublicUserMeta, Role, User, UserManagerConfig},
 };
@@ -27,16 +30,30 @@ impl Group for SomeGroup {}
 
 type MyUser = User<Roles, SomeGroup, MyPublicUserMetadata, MyPrivateUserMetadata>;
 
+struct DiskManager {
+    user: SqliteDiskOpUser,
+    session: SqliteDiskOpSession,
+    token: SqliteDiskOpToken,
+}
+
 fn main() {
     let conn_manager = SqliteConnectionManager::file("example_db/sqlite.db");
     let pool = r2d2::Pool::new(conn_manager).unwrap();
 
-    let user_manager = UserManagerConfig::new_default().init(SqliteDiskOpUser::new(pool.clone()));
+    let disk_manager = DiskManager {
+        user: SqliteDiskOpUser::new(pool.clone()),
+        session: SqliteDiskOpSession::new(pool.clone()),
+        token: SqliteDiskOpToken::new(pool.clone()),
+    };
 
-    let session_manager = SessionManagerConfig::new_default().init(
-        SqliteDiskOpSession::new(pool.clone()),
-        SqliteDiskOpToken::new(pool),
-    );
+    disk_manager.token.create_table(None).unwrap();
+    disk_manager.session.create_table(None).unwrap();
+    disk_manager.user.create_table(None).unwrap();
+
+    let user_manager = UserManagerConfig::new_default().init(disk_manager.user);
+
+    let session_manager =
+        SessionManagerConfig::new_default().init(disk_manager.session, disk_manager.token);
 
     let mut i = 0;
 

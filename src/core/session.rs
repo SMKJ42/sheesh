@@ -127,7 +127,7 @@ pub struct Session {
     current_token_id: u64,
 }
 
-impl IntoRow for &Session {
+impl IntoRow for Session {
     fn into_row(&self) -> Vec<String> {
         return vec![
             self.id.to_string(),

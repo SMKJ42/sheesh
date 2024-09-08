@@ -1,4 +1,6 @@
-use crate::harness::{sqlite::SqliteDiskOpUser, DiskOp};
+use std::fmt::{Debug, Display};
+
+use crate::harness::{sqlite::SqliteDiskOpUser, DiskOp, IntoRow};
 
 use super::id::{DefaultIdGenerator, IdGenerator};
 
@@ -16,6 +18,17 @@ where
     user_name: String,
     public: Pu,
     id: u64,
+}
+
+impl<Pu> IntoRow for UserPublic<Pu>
+where
+    Pu: PublicUserMeta + IntoRow,
+{
+    fn into_row(&self) -> Vec<String> {
+        let mut columns = vec![self.user_name.clone(), self.id.to_string()];
+        columns.extend(self.public.into_row());
+        return columns;
+    }
 }
 
 impl<Pu> UserPublic<Pu>
@@ -110,16 +123,21 @@ where
         private: Pr,
     ) -> User<R, G, Pu, Pr>
     where
-        R: Role,
-        G: Group,
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta,
+        R: Role + Display,
+        G: Group + Display,
+        Pu: PublicUserMeta + IntoRow,
+        Pr: PrivateUserMeta + IntoRow,
     {
         let id = self.id_generator.new_u64();
-        return User::new(id, user_name, role, public, private);
+        let user = User::new(id, user_name, role, public, private);
+
+        let cols = user.into_row();
+        self.harness.insert(&user, &cols);
+        return user;
     }
 }
 
+#[derive(Clone)]
 pub struct User<R, G, Pu, Pr>
 where
     R: Role,
@@ -207,5 +225,23 @@ impl<R: Role, G: Group + PartialEq, Pu: PublicUserMeta, Pr: PrivateUserMeta> Use
         } else {
             self.groups.push(group)
         }
+    }
+}
+
+impl<R, G, Pu, Pr> IntoRow for User<R, G, Pu, Pr>
+where
+    R: Role + Display,
+    G: Group + Display,
+    Pu: PublicUserMeta + IntoRow,
+    Pr: PrivateUserMeta + IntoRow,
+{
+    fn into_row(&self) -> Vec<String> {
+        let private = self.private.into_row();
+        let public = self.public.into_row();
+        let mut columns = vec![format!("{}", self.role)];
+        columns.extend(self.groups.iter().map(|x| format!("{}", x)));
+        columns.extend(public);
+        columns.extend(private);
+        return columns;
     }
 }
