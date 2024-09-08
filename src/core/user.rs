@@ -1,4 +1,7 @@
-use std::fmt::{Debug, Display};
+use std::{
+    error,
+    fmt::{Debug, Display},
+};
 
 use crate::harness::{sqlite::SqliteDiskOpUser, DiskOp, IntoRow};
 
@@ -121,7 +124,7 @@ where
         role: R,
         public: Pu,
         private: Pr,
-    ) -> User<R, G, Pu, Pr>
+    ) -> Result<User<R, G, Pu, Pr>, Box<dyn error::Error>>
     where
         R: Role + Display,
         G: Group + Display,
@@ -132,8 +135,8 @@ where
         let user = User::new(id, user_name, role, public, private);
 
         let cols = user.into_row();
-        self.harness.insert(&user, &cols);
-        return user;
+        self.harness.insert(&user, &cols)?;
+        return Ok(user);
     }
 }
 
