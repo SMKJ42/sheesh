@@ -1,15 +1,18 @@
 use std::error;
 
+use chrono::{DateTime, Utc};
+
 use crate::{
     harness::{
         sqlite::{SqliteDiskOpSession, SqliteDiskOpToken},
-        DiskOp, IntoRow,
+        DiskOp, IntoValues,
     },
     hash::{DefaultHashGenerator, HashGenerator},
 };
 
 use super::{
     auth_token::{AuthToken, AuthTokenManager, AuthTokenManagerConfig},
+    get_token_expiry,
     id::{DefaultIdGenerator, IdGenerator},
 };
 
@@ -21,6 +24,7 @@ where
     id_generator: T,
     token_generator_config: AuthTokenManagerConfig<T, U>,
     fields: Vec<String>,
+    ttl: i64,
 }
 
 impl SessionManagerConfig<DefaultIdGenerator, DefaultHashGenerator> {
@@ -28,11 +32,13 @@ impl SessionManagerConfig<DefaultIdGenerator, DefaultHashGenerator> {
         return Self {
             id_generator: DefaultIdGenerator {},
             token_generator_config: AuthTokenManagerConfig::new_default(),
+            ttl: 120,
             fields: vec![
                 "id".to_string(),
                 "user_id".to_string(),
-                "expires".to_string(),
                 "refresh_token".to_string(),
+                "auth_token".to_string(),
+                "expires".to_string(),
             ],
         };
     }
@@ -57,6 +63,7 @@ where
             token_generator: self.token_generator_config.init(token_harness),
             harness: session_harness,
             fields: self.fields.to_owned(),
+            ttl: self.ttl,
         };
     }
 }
@@ -72,6 +79,7 @@ where
     token_generator: AuthTokenManager<T, U, X>,
     fields: Vec<String>,
     harness: V,
+    ttl: i64,
 }
 
 impl
@@ -94,27 +102,36 @@ where
     V: DiskOp,
     X: DiskOp,
 {
-    pub fn new_session(&self, user_id: u64) -> Result<(Session, AuthToken), Box<dyn error::Error>> {
+    pub fn new_session(
+        &self,
+        user_id: u64,
+    ) -> Result<(Session, AuthToken, AuthToken), Box<dyn error::Error>> {
         let id = self.id_generator.new_u64();
-        let new_token = self.token_generator.next_token(id)?;
+
+        let auth_token = self.token_generator.next_token()?;
+        let refresh_token = self.token_generator.next_token()?;
+
+        let expires = get_token_expiry(self.ttl)?;
 
         let session = Session {
             id,
             user_id,
-            current_token_id: new_token.id(),
+            refresh_token: Some(refresh_token.id()),
+            auth_token: Some(auth_token.id()),
+            expires,
         };
-
         self.harness.insert(&session, &self.fields)?;
 
-        return Ok((session, new_token));
+        return Ok((session, auth_token, refresh_token));
     }
 
     pub fn refresh_session_token(
         &self,
         session: &mut Session,
     ) -> Result<AuthToken, Box<dyn error::Error>> {
-        let new_token = self.token_generator.next_token(session.id)?;
-        session.current_token_id = new_token.id();
+        let new_token = self.token_generator.next_token()?;
+
+        unimplemented!();
 
         return Ok(new_token);
     }
@@ -124,15 +141,19 @@ where
 pub struct Session {
     id: u64,
     user_id: u64,
-    current_token_id: u64,
+    refresh_token: Option<u64>,
+    auth_token: Option<u64>,
+    expires: DateTime<Utc>,
 }
 
-impl IntoRow for Session {
-    fn into_row(&self) -> Vec<String> {
+impl IntoValues for Session {
+    fn into_values(&self) -> Vec<String> {
         return vec![
             self.id.to_string(),
             self.user_id.to_string(),
-            self.current_token_id.to_string(),
+            self.refresh_token.unwrap_or(0).to_string(),
+            self.auth_token.unwrap_or(0).to_string(),
+            self.expires.to_string(),
         ];
     }
 }
@@ -147,9 +168,5 @@ impl Session {
 
     pub fn user_id(&self) -> u64 {
         return self.user_id;
-    }
-
-    pub fn current_token_id(&self) -> u64 {
-        return self.current_token_id;
     }
 }

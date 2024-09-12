@@ -1,9 +1,14 @@
 use std::{
-    error,
+    error::{self},
     fmt::{Debug, Display},
 };
 
-use crate::harness::{sqlite::SqliteDiskOpUser, DiskOp, IntoRow};
+use serde::Serialize;
+
+use crate::{
+    harness::{sqlite::SqliteDiskOpUser, DiskOp, IntoValues},
+    hash::DefaultHashBrown,
+};
 
 use super::id::{DefaultIdGenerator, IdGenerator};
 
@@ -18,19 +23,15 @@ pub struct UserPublic<Pu>
 where
     Pu: PublicUserMeta,
 {
-    user_name: String,
     public: Pu,
-    id: u64,
 }
 
-impl<Pu> IntoRow for UserPublic<Pu>
+impl<Pu> IntoValues for UserPublic<Pu>
 where
-    Pu: PublicUserMeta + IntoRow,
+    Pu: PublicUserMeta + IntoValues,
 {
-    fn into_row(&self) -> Vec<String> {
-        let mut columns = vec![self.user_name.clone(), self.id.to_string()];
-        columns.extend(self.public.into_row());
-        return columns;
+    fn into_values(&self) -> Vec<String> {
+        return self.public.into_values();
     }
 }
 
@@ -38,20 +39,8 @@ impl<Pu> UserPublic<Pu>
 where
     Pu: PublicUserMeta,
 {
-    pub fn new(id: u64, user_name: String, public: Pu) -> Self {
-        return Self {
-            user_name,
-            public,
-            id,
-        };
-    }
-
-    pub fn new_with_id(user_name: String, public: Pu, id: u64) -> Self {
-        return Self {
-            user_name,
-            public,
-            id,
-        };
+    pub fn new(public: Pu) -> Self {
+        return Self { public };
     }
 
     pub fn update_public(&mut self, public: Pu) {
@@ -61,18 +50,6 @@ where
     pub fn public(&self) -> &Pu {
         return &self.public;
     }
-
-    pub fn update_user_name(&mut self, user_name: String) {
-        self.user_name = user_name;
-    }
-
-    pub fn user_name(&self) -> &String {
-        return &self.user_name;
-    }
-
-    pub fn id(&self) -> u64 {
-        return self.id;
-    }
 }
 
 pub struct UserManagerConfig<T>
@@ -80,12 +57,23 @@ where
     T: IdGenerator,
 {
     id_generator: T,
+    cols: Vec<String>,
 }
 
 impl UserManagerConfig<DefaultIdGenerator> {
     pub fn new_default() -> Self {
         Self {
             id_generator: DefaultIdGenerator {},
+            cols: vec![
+                "username".to_string(),
+                "session_id".to_string(),
+                "secret".to_string(),
+                "salt".to_string(),
+                "id".to_string(),
+                "role".to_string(),
+                "groups".to_string(),
+                "ban".to_string(),
+            ],
         }
     }
 }
@@ -97,6 +85,7 @@ where
     pub fn init<U: DiskOp>(&self, harness: U) -> UserManager<T, U> {
         UserManager {
             id_generator: self.id_generator,
+            cols: self.cols.clone(),
             harness,
         }
     }
@@ -109,6 +98,7 @@ where
 {
     id_generator: T,
     harness: V,
+    cols: Vec<String>,
 }
 
 impl UserManager<DefaultIdGenerator, SqliteDiskOpUser> {}
@@ -121,21 +111,21 @@ where
     pub fn new_user<R, G, Pu, Pr>(
         &self,
         user_name: String,
+        pwd: String,
         role: R,
         public: Pu,
         private: Pr,
     ) -> Result<User<R, G, Pu, Pr>, Box<dyn error::Error>>
     where
         R: Role + Display,
-        G: Group + Display,
-        Pu: PublicUserMeta + IntoRow,
-        Pr: PrivateUserMeta + IntoRow,
+        G: Group + Serialize,
+        Pu: PublicUserMeta + IntoValues,
+        Pr: PrivateUserMeta + IntoValues,
     {
         let id = self.id_generator.new_u64();
-        let user = User::new(id, user_name, role, public, private);
+        let user = User::new(id, user_name, pwd, role, public, private)?;
 
-        let cols = user.into_row();
-        self.harness.insert(&user, &cols)?;
+        self.harness.insert(&user, &self.cols)?;
         return Ok(user);
     }
 }
@@ -148,11 +138,16 @@ where
     Pu: PublicUserMeta,
     Pr: PrivateUserMeta,
 {
+    id: u64,
+    user_name: String,
+    secret: String,
+    salt: String,
     role: R,
     groups: Vec<G>,
     public: UserPublic<Pu>,
     private: Pr,
-    banned: bool,
+    ban: bool,
+    session: Option<i64>,
 }
 
 impl<R, G, Pu, Pr> User<R, G, Pu, Pr>
@@ -162,15 +157,43 @@ where
     Pu: PublicUserMeta,
     Pr: PrivateUserMeta,
 {
-    pub fn new(id: u64, user_name: String, role: R, public: Pu, private: Pr) -> Self {
-        let public = UserPublic::new(id, user_name, public);
-        Self {
+    pub fn new(
+        id: u64,
+        user_name: String,
+        pwd: String,
+        role: R,
+        public: Pu,
+        private: Pr,
+    ) -> Result<Self, Box<dyn error::Error>> {
+        let hash_brown = DefaultHashBrown::init();
+        let salt = hash_brown.create_salt();
+        let secret = hash_brown.hash(pwd, &salt)?;
+
+        let public = UserPublic::new(public);
+        return Ok(Self {
+            id,
+            user_name,
+            secret: secret.to_string(),
+            salt: salt.to_string(),
             role,
             groups: Vec::new(),
             public,
             private,
-            banned: false,
-        }
+            ban: false,
+            session: None,
+        });
+    }
+
+    pub fn id(&self) -> u64 {
+        return self.id;
+    }
+
+    pub fn user_name(&self) -> String {
+        return self.user_name.clone();
+    }
+
+    pub fn update_user_name(&mut self, user_name: String) {
+        self.user_name = user_name
     }
 
     pub fn role(&self) -> &R {
@@ -187,15 +210,15 @@ where
     }
 
     pub fn ban(&mut self) {
-        self.banned = true;
+        self.ban = true;
     }
 
     pub fn unban(&mut self) {
-        self.banned = false;
+        self.ban = false;
     }
 
     pub fn is_banned(&self) -> bool {
-        return self.banned;
+        return self.ban;
     }
 
     pub fn set_public_data(&mut self, public: Pu) {
@@ -231,20 +254,31 @@ impl<R: Role, G: Group + PartialEq, Pu: PublicUserMeta, Pr: PrivateUserMeta> Use
     }
 }
 
-impl<R, G, Pu, Pr> IntoRow for User<R, G, Pu, Pr>
+impl<R, G, Pu, Pr> IntoValues for User<R, G, Pu, Pr>
 where
     R: Role + Display,
-    G: Group + Display,
-    Pu: PublicUserMeta + IntoRow,
-    Pr: PrivateUserMeta + IntoRow,
+    G: Group + Serialize,
+    Pu: PublicUserMeta + IntoValues,
+    Pr: PrivateUserMeta + IntoValues,
 {
-    fn into_row(&self) -> Vec<String> {
-        let private = self.private.into_row();
-        let public = self.public.into_row();
-        let mut columns = vec![format!("{}", self.role)];
-        columns.extend(self.groups.iter().map(|x| format!("{}", x)));
-        columns.extend(public);
-        columns.extend(private);
-        return columns;
+    fn into_values(&self) -> Vec<String> {
+        let mut values = vec![
+            self.id.to_string(),
+            self.user_name.clone(),
+            self.secret.clone(),
+            self.salt.clone(),
+            self.session.unwrap_or(0).to_string(),
+            self.role.to_string(),
+            serde_json::to_string(&self.groups).unwrap(),
+            self.ban.to_string(),
+        ];
+
+        let private = self.private.into_values();
+        let public = self.public.into_values();
+
+        values.extend(public);
+        values.extend(private);
+
+        return values;
     }
 }

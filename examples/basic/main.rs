@@ -1,36 +1,13 @@
-use std::error;
+mod types;
 
-use sheesh::{
-    harness::{
-        sqlite::{SqliteDiskOpSession, SqliteDiskOpToken, SqliteDiskOpUser},
-        DiskOp, DiskOpManager,
-    },
-    session::SessionManagerConfig,
-    user::{Group, PrivateUserMeta, PublicUserMeta, Role, User, UserManagerConfig},
-};
+use sheesh::{harness::DiskOpManager, session::SessionManagerConfig, user::UserManagerConfig};
 
 extern crate r2d2;
 extern crate r2d2_sqlite;
 extern crate rusqlite;
-
 use r2d2_sqlite::SqliteConnectionManager;
 
-enum Roles {
-    Admin,
-}
-
-impl Role for Roles {}
-
-struct MyPublicUserMetadata {}
-impl PublicUserMeta for MyPublicUserMetadata {}
-
-struct MyPrivateUserMetadata {}
-impl PrivateUserMeta for MyPrivateUserMetadata {}
-
-struct SomeGroup {}
-impl Group for SomeGroup {}
-
-type MyUser = User<Roles, SomeGroup, MyPublicUserMetadata, MyPrivateUserMetadata>;
+use types::*;
 
 fn main() {
     // establish db connection.
@@ -52,6 +29,7 @@ fn main() {
         let mut user: MyUser = user_manager
             .new_user(
                 "test".to_string(),
+                "pwd".to_string(),
                 Roles::Admin,
                 MyPublicUserMetadata {},
                 MyPrivateUserMetadata {},
@@ -64,15 +42,13 @@ fn main() {
         user.set_public_data(public);
         user.set_private_data(private);
 
-        let (mut session, mut token) = session_manager.new_session(user.public().id()).unwrap();
+        let (mut session, mut auth_token, session_token) =
+            session_manager.new_session(user.id()).unwrap();
 
-        token.invalidate();
+        // let mut new_token = session_manager.refresh_session_token(&mut session).unwrap();
 
-        let mut new_token = session_manager.refresh_session_token(&mut session).unwrap();
-
-        let is_valid_token = new_token.is_valid();
         if i % 100 == 0 {
-            println!("one loop");
+            println!("{}", i / 100);
         }
         i += 1;
     }

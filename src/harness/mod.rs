@@ -41,20 +41,29 @@ where
 }
 
 pub trait DiskOp {
-    fn read<T: IntoRow>(&self, item: &T, cols: &Vec<String>) -> Result<(), Box<dyn error::Error>>;
-    fn update<T: IntoRow>(&self, item: &T, cols: &Vec<String>)
-        -> Result<(), Box<dyn error::Error>>;
-    fn insert<T: IntoRow>(&self, item: &T, cols: &Vec<String>)
-        -> Result<(), Box<dyn error::Error>>;
-    fn delete<T: IntoRow>(&self, item: &T, cols: &Vec<String>)
-        -> Result<(), Box<dyn error::Error>>;
+    fn read<T: IntoValues>(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
+    fn update<T: IntoValues>(
+        &self,
+        item: &T,
+        cols: &Vec<String>,
+    ) -> Result<(), Box<dyn error::Error>>;
+    fn insert<T: IntoValues>(
+        &self,
+        item: &T,
+        cols: &Vec<String>,
+    ) -> Result<(), Box<dyn error::Error>>;
+    fn delete<T: IntoValues>(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
     fn create_table(&self, sql_string: Option<String>) -> Result<(), Box<dyn error::Error>>;
 }
-
-pub trait IntoRow {
-    fn into_row(&self) -> Vec<String>;
+/// IntoValues should turn the values into a string form to be inserted into a SQL statement
+pub trait IntoValues {
+    fn into_values(&self) -> Vec<String>;
 }
-pub trait IntoCols {}
+
+// TODO: This should be for extinsibility of the tables in the SQL database... ?
+// pub trait IntoCols {
+//     fn into_cols(&self) -> Vec<String>;
+// }
 
 pub trait DiskOpUser {
     fn write_role(&self) -> Result<(), Box<dyn error::Error>>;
@@ -108,16 +117,6 @@ where
     U: DiskOp,
     V: DiskOp,
 {
-    pub fn new_sqlite(
-        pool: Pool<SqliteConnectionManager>,
-    ) -> DiskOpManager<SqliteDiskOpUser, SqliteDiskOpSession, SqliteDiskOpToken> {
-        return DiskOpManager {
-            user: SqliteDiskOpUser::new(pool.clone()),
-            session: SqliteDiskOpSession::new(pool.clone()),
-            token: SqliteDiskOpToken::new(pool),
-        };
-    }
-
     pub fn new_custom(user: T, session: U, token: V) -> Self {
         return Self {
             user,
@@ -131,5 +130,17 @@ where
         self.session.create_table(None)?;
         self.user.create_table(None)?;
         return Ok(());
+    }
+}
+
+impl DiskOpManager<SqliteDiskOpUser, SqliteDiskOpSession, SqliteDiskOpToken> {
+    pub fn new_sqlite(
+        pool: Pool<SqliteConnectionManager>,
+    ) -> DiskOpManager<SqliteDiskOpUser, SqliteDiskOpSession, SqliteDiskOpToken> {
+        return DiskOpManager {
+            user: SqliteDiskOpUser::new(pool.clone()),
+            session: SqliteDiskOpSession::new(pool.clone()),
+            token: SqliteDiskOpToken::new(pool),
+        };
     }
 }

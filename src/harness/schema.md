@@ -1,10 +1,14 @@
-### The following SQL statments are the default SQL statements used when no extra fields are provided.
+### The following values are the default SQL values when no extra fields are provided.
 
 ## User
 
+id INTEGER,
 username STRING,
+
+<!-- secret STRING,
+salt STRING, -->
+
 session_id INTEGER,
-id STRING,
 role STRING,
 groups STRING,
 ban TINYINT,
