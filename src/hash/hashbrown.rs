@@ -1,4 +1,5 @@
 use scrypt::password_hash::{self, rand_core, PasswordHasher, PasswordVerifier};
+use scrypt::Params;
 
 use super::method::PasswordMethod;
 use super::rng::DefaultRng;
@@ -48,8 +49,16 @@ where
         pwd: String,
         salt: &'a password_hash::SaltString,
     ) -> Result<password_hash::PasswordHash<'a>, password_hash::Error> {
+        let params = Params::new(12, 8, 1, 32);
+
+        if params.is_err() {
+            panic!();
+        }
+
         match &self.method {
-            PasswordMethod::Scrypt(scrypt) => scrypt.hash_password(pwd.as_bytes(), salt),
+            PasswordMethod::Scrypt(scrypt) => {
+                scrypt.hash_password_customized(pwd.as_bytes(), None, None, params.unwrap(), salt)
+            }
         }
     }
 }

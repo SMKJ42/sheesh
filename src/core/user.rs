@@ -1,9 +1,11 @@
 use std::{
     error::{self},
     fmt::{Debug, Display},
+    time::Instant,
 };
 
-use serde::Serialize;
+use scrypt::password_hash::{Encoding, PasswordHashString};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     harness::{sqlite::SqliteDiskOpUser, DiskOp, IntoValues},
@@ -165,9 +167,21 @@ where
         public: Pu,
         private: Pr,
     ) -> Result<Self, Box<dyn error::Error>> {
+        let start = Instant::now();
+
         let hash_brown = DefaultHashBrown::init();
         let salt = hash_brown.create_salt();
+        let salt_gen = Instant::now().duration_since(start).as_millis();
+        println!("salt_gen: {}", salt_gen);
+
         let secret = hash_brown.hash(pwd, &salt)?;
+
+        println!("hash: {}", Instant::now().duration_since(start).as_millis());
+        println!("secret: {}", secret);
+        let secret = secret.serialize();
+        let test = PasswordHashString::parse(secret.as_str(), Encoding::B64)?;
+
+        println!("test: {}", test);
 
         let public = UserPublic::new(public);
         return Ok(Self {

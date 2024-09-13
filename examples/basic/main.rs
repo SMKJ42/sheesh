@@ -47,9 +47,7 @@ fn main() {
 
         // let mut new_token = session_manager.refresh_session_token(&mut session).unwrap();
 
-        if i % 100 == 0 {
-            println!("{}", i / 100);
-        }
+        println!("{}", i);
         i += 1;
     }
 }
