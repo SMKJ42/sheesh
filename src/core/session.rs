@@ -2,114 +2,91 @@ use std::error;
 
 use chrono::{DateTime, Utc};
 
-use crate::{
-    harness::{
-        sqlite::{SqliteDiskOpSession, SqliteDiskOpToken},
-        DiskOp, IntoValues,
-    },
-    hash::{DefaultHashGenerator, HashGenerator},
+use crate::harness::{
+    sqlite::{SqliteDiskOpSession, SqliteDiskOpToken},
+    DiskOpSession, DiskOpToken,
 };
 
 use super::{
-    auth_token::{AuthToken, AuthTokenManager, AuthTokenManagerConfig},
+    auth_token::{AuthTokenManager, AuthTokenManagerConfig},
     get_token_expiry,
     id::{DefaultIdGenerator, IdGenerator},
 };
 
-pub struct SessionManagerConfig<T, U>
+pub struct SessionManagerConfig<'a, T>
 where
     T: IdGenerator,
-    U: HashGenerator,
 {
     id_generator: T,
-    token_generator_config: AuthTokenManagerConfig<T, U>,
-    fields: Vec<String>,
+    token_generator_config: AuthTokenManagerConfig<'a, T>,
     ttl: i64,
 }
 
-impl SessionManagerConfig<DefaultIdGenerator, DefaultHashGenerator> {
-    pub fn new_default() -> Self {
+impl<'a> Default for SessionManagerConfig<'a, DefaultIdGenerator> {
+    fn default() -> Self {
         return Self {
             id_generator: DefaultIdGenerator {},
-            token_generator_config: AuthTokenManagerConfig::new_default(),
+            token_generator_config: AuthTokenManagerConfig::default(),
             ttl: 120,
-            fields: vec![
-                "id".to_string(),
-                "user_id".to_string(),
-                "refresh_token".to_string(),
-                "auth_token".to_string(),
-                "expires".to_string(),
-            ],
         };
-    }
-
-    pub fn with_fields(&mut self, fields: Vec<String>) {
-        self.fields.extend(fields);
     }
 }
 
-impl<T, U> SessionManagerConfig<T, U>
+impl<'a, T> SessionManagerConfig<'a, T>
 where
     T: IdGenerator + Copy,
-    U: HashGenerator + Copy,
 {
-    pub fn init<V: DiskOp, X: DiskOp>(
+    pub fn init<V: DiskOpSession, Y: DiskOpToken>(
         &self,
         session_harness: V,
-        token_harness: X,
-    ) -> SessionManager<T, U, V, X> {
+        token_harness: Y,
+    ) -> SessionManager<'a, T, V, Y> {
         return SessionManager {
             id_generator: self.id_generator,
-            token_generator: self.token_generator_config.init(token_harness),
             harness: session_harness,
-            fields: self.fields.to_owned(),
             ttl: self.ttl,
+            token_generator: self.token_generator_config.init(token_harness),
         };
     }
 }
 
-pub struct SessionManager<T, U, V, X>
+pub struct SessionManager<'a, T, V, X>
 where
     T: IdGenerator,
-    U: HashGenerator,
-    V: DiskOp,
-    X: DiskOp,
+    V: DiskOpSession,
+    X: DiskOpToken,
 {
     id_generator: T,
-    token_generator: AuthTokenManager<T, U, X>,
-    fields: Vec<String>,
+    token_generator: AuthTokenManager<'a, T, X>,
     harness: V,
     ttl: i64,
 }
 
-impl
-    SessionManager<DefaultIdGenerator, DefaultHashGenerator, SqliteDiskOpSession, SqliteDiskOpToken>
+impl<'a> SessionManager<'a, DefaultIdGenerator, SqliteDiskOpSession, SqliteDiskOpToken> {}
+
+impl<'a, T, X> SessionManager<'a, T, SqliteDiskOpSession, X>
+where
+    T: IdGenerator,
+    X: DiskOpToken,
 {
 }
 
-impl<T, U, X> SessionManager<T, U, SqliteDiskOpSession, X>
+/// Takes in a user_id, and returns the session and associated secrets ->
+/// (session: Session, auth_secret: String, refresh_secret: String)  
+impl<'a, T, V, X> SessionManager<'a, T, V, X>
 where
     T: IdGenerator,
-    U: HashGenerator,
-    X: DiskOp,
-{
-}
-
-impl<T, U, V, X> SessionManager<T, U, V, X>
-where
-    T: IdGenerator,
-    U: HashGenerator,
-    V: DiskOp,
-    X: DiskOp,
+    V: DiskOpSession,
+    X: DiskOpToken,
 {
     pub fn new_session(
         &self,
         user_id: u64,
-    ) -> Result<(Session, AuthToken, AuthToken), Box<dyn error::Error>> {
+    ) -> Result<(Session, String, String), Box<dyn error::Error>> {
         let id = self.id_generator.new_u64();
 
-        let auth_token = self.token_generator.next_token()?;
-        let refresh_token = self.token_generator.next_token()?;
+        let (auth_token, auth_secret) = self.token_generator.next_token()?;
+        let (refresh_token, refresh_secret) = self.token_generator.next_token()?;
 
         let expires = get_token_expiry(self.ttl)?;
 
@@ -120,20 +97,33 @@ where
             auth_token: Some(auth_token.id()),
             expires,
         };
-        self.harness.insert(&session, &self.fields)?;
+        self.harness.insert(&session)?;
 
-        return Ok((session, auth_token, refresh_token));
+        return Ok((session, auth_secret, refresh_secret));
     }
 
-    pub fn refresh_session_token(
+    /// Updates the sessions with a new session token ->
+    /// secret: String
+    pub fn issue_new_auth_token(
         &self,
         session: &mut Session,
-    ) -> Result<AuthToken, Box<dyn error::Error>> {
-        let new_token = self.token_generator.next_token()?;
+    ) -> Result<String, Box<dyn error::Error>> {
+        let (new_token, auth_token_secret) = self.token_generator.next_token()?;
 
-        unimplemented!();
+        session.auth_token = Some(new_token.id());
 
-        return Ok(new_token);
+        todo!("insert new token into db, cleanup old token, return the secret")
+    }
+
+    pub fn issue_new_refresh_token(
+        &self,
+        session: &mut Session,
+    ) -> Result<String, Box<dyn error::Error>> {
+        let (new_token, refresh_token_secret) = self.token_generator.next_token()?;
+
+        session.refresh_token = Some(new_token.id());
+
+        todo!("insert new token into db, cleanup old token, return the secret")
     }
 }
 
@@ -146,21 +136,6 @@ pub struct Session {
     expires: DateTime<Utc>,
 }
 
-impl IntoValues for Session {
-    fn into_values(&self) -> Vec<String> {
-        return vec![
-            self.id.to_string(),
-            self.user_id.to_string(),
-            self.refresh_token.unwrap_or(0).to_string(),
-            self.auth_token.unwrap_or(0).to_string(),
-            self.expires.to_string(),
-        ];
-    }
-}
-
-/// Session
-///
-/// Only has getters to prevent accidental overwrites.
 impl Session {
     pub fn id(&self) -> u64 {
         return self.id;
@@ -168,5 +143,25 @@ impl Session {
 
     pub fn user_id(&self) -> u64 {
         return self.user_id;
+    }
+
+    pub fn refresh_token(&self) -> Option<u64> {
+        return self.refresh_token;
+    }
+
+    pub fn auth_token(&self) -> Option<u64> {
+        return self.auth_token;
+    }
+
+    pub fn expires(&self) -> DateTime<Utc> {
+        return self.expires;
+    }
+
+    pub fn from_values(values: Vec<String>) -> Self {
+        unimplemented!()
+    }
+
+    pub fn into_values(&self) -> Vec<String> {
+        unimplemented!()
     }
 }

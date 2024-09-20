@@ -4,10 +4,8 @@
 
 id INTEGER,
 username STRING,
-
-<!-- secret STRING,
-salt STRING, -->
-
+secret STRING,
+salt STRING,
 session_id INTEGER,
 role STRING,
 groups STRING,
@@ -27,5 +25,6 @@ FOREIGN KEY(refresh_token) REFERENCES token(id)
 ## Token
 
 id INTEGER PRIMARY KEY,
-token STRING,
+secret STRING,
+salt STRING,
 expires DATETIME

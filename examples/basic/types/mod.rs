@@ -1,9 +1,6 @@
 use std::fmt::Display;
 
-use sheesh::{
-    harness::IntoValues,
-    user::{Group, PrivateUserMeta, PublicUserMeta, Role, User},
-};
+use sheesh::user::{Group, PrivateUserMeta, PublicUserMeta, Role, User};
 
 use serde::Serialize;
 
@@ -29,18 +26,22 @@ impl Display for Roles {
 impl Role for Roles {}
 
 pub struct MyPublicUserMetadata {}
-impl PublicUserMeta for MyPublicUserMetadata {}
-impl IntoValues for MyPublicUserMetadata {
+impl PublicUserMeta for MyPublicUserMetadata {
+    fn from_values(values: Vec<String>) -> Self {
+        Self {}
+    }
     fn into_values(&self) -> Vec<String> {
-        return vec![];
+        vec![]
     }
 }
 
 pub struct MyPrivateUserMetadata {}
-impl PrivateUserMeta for MyPrivateUserMetadata {}
-impl IntoValues for MyPrivateUserMetadata {
+impl PrivateUserMeta for MyPrivateUserMetadata {
+    fn from_values(values: Vec<String>) -> Self {
+        Self {}
+    }
     fn into_values(&self) -> Vec<String> {
-        return vec![];
+        vec![]
     }
 }
 
@@ -57,7 +58,7 @@ impl Serialize for SomeGroup {
 
 impl Display for SomeGroup {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        return write!(f, "SomeGroup");
+        return write!(f, "some_group");
     }
 }
 

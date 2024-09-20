@@ -1,12 +1,14 @@
+pub mod mysql;
+pub mod postgresql;
 pub mod sqlite;
-// mod postgresql;
-// mod mysql;
 
 use std::error;
 
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
-use sqlite::{SqliteDiskOpSession, SqliteDiskOpToken, SqliteDiskOpUser};
+use crate::{
+    auth_token::AuthToken,
+    session::Session,
+    user::{Group, PrivateUserMeta, PublicUserMeta, Role, User},
+};
 
 pub enum Db {
     MySql,
@@ -14,58 +16,30 @@ pub enum Db {
     Sqlite,
 }
 
-pub struct Harness<T, U>
-where
-    T: DiskOp,
-    U: DiskOp,
-{
-    pub user: T,
-    pub session: U,
-    pub token: U,
-}
-
-impl<T, U> Harness<T, U>
-where
-    T: DiskOp,
-    U: DiskOp,
-{
-    pub fn sqlite() -> Self {
-        unimplemented!()
-    }
-    // pub fn mysql() -> Self {
-    //     unimplemented!()
-    // }
-    // pub fn postgresql() -> Self {
-    // unimplemented!()
-    // }
-}
-
-pub trait DiskOp {
-    fn read<T: IntoValues>(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
-    fn update<T: IntoValues>(
-        &self,
-        item: &T,
-        cols: &Vec<String>,
-    ) -> Result<(), Box<dyn error::Error>>;
-    fn insert<T: IntoValues>(
-        &self,
-        item: &T,
-        cols: &Vec<String>,
-    ) -> Result<(), Box<dyn error::Error>>;
-    fn delete<T: IntoValues>(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
-    fn create_table(&self, sql_string: Option<String>) -> Result<(), Box<dyn error::Error>>;
-}
-/// IntoValues should turn the values into a string form to be inserted into a SQL statement
-pub trait IntoValues {
-    fn into_values(&self) -> Vec<String>;
-}
-
-// TODO: This should be for extinsibility of the tables in the SQL database... ?
-// pub trait IntoCols {
-//     fn into_cols(&self) -> Vec<String>;
-// }
-
 pub trait DiskOpUser {
+    fn read<R, G, Pu, Pr>(&self, id: i64) -> Result<User<R, G, Pu, Pr>, Box<dyn error::Error>>
+    where
+        R: Role,
+        G: Group,
+        Pu: PublicUserMeta,
+        Pr: PrivateUserMeta;
+
+    fn update<R, G, Pu, Pr>(&self, item: &User<R, G, Pu, Pr>) -> Result<(), Box<dyn error::Error>>
+    where
+        R: Role,
+        G: Group,
+        Pu: PublicUserMeta,
+        Pr: PrivateUserMeta;
+
+    fn insert<R, G, Pu, Pr>(&self, item: &User<R, G, Pu, Pr>) -> Result<(), Box<dyn error::Error>>
+    where
+        R: Role,
+        G: Group,
+        Pu: PublicUserMeta,
+        Pr: PrivateUserMeta;
+
+    fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
+    fn create_table(&self, sql_string: Option<String>) -> Result<(), Box<dyn error::Error>>;
     fn write_role(&self) -> Result<(), Box<dyn error::Error>>;
     fn insert_group(&self) -> Result<(), Box<dyn error::Error>>;
     fn remove_group(&self) -> Result<(), Box<dyn error::Error>>;
@@ -75,11 +49,19 @@ pub trait DiskOpUser {
 }
 
 pub trait DiskOpSession {
-    // TODO:
+    fn read(&self, id: i64) -> Result<Session, Box<dyn error::Error>>;
+    fn update(&self, item: &Session) -> Result<(), Box<dyn error::Error>>;
+    fn insert(&self, item: &Session) -> Result<(), Box<dyn error::Error>>;
+    fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
+    fn create_table(&self, sql_string: Option<String>) -> Result<(), Box<dyn error::Error>>;
 }
 
 pub trait DiskOpToken {
-    // TODO:
+    fn read(&self, id: i64) -> Result<AuthToken, Box<dyn error::Error>>;
+    fn update(&self, item: &AuthToken) -> Result<(), Box<dyn error::Error>>;
+    fn insert(&self, item: &AuthToken) -> Result<(), Box<dyn error::Error>>;
+    fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
+    fn create_table(&self, sql_string: Option<String>) -> Result<(), Box<dyn error::Error>>;
 }
 
 pub fn repeat_vars(count: usize) -> String {
@@ -102,9 +84,9 @@ pub fn repeat_fields(cols: Vec<String>) -> String {
 
 pub struct DiskOpManager<T, U, V>
 where
-    T: DiskOp,
-    U: DiskOp,
-    V: DiskOp,
+    T: DiskOpUser,
+    U: DiskOpSession,
+    V: DiskOpToken,
 {
     pub user: T,
     pub session: U,
@@ -113,9 +95,9 @@ where
 
 impl<T, U, V> DiskOpManager<T, U, V>
 where
-    T: DiskOp,
-    U: DiskOp,
-    V: DiskOp,
+    T: DiskOpUser,
+    U: DiskOpSession,
+    V: DiskOpToken,
 {
     pub fn new_custom(user: T, session: U, token: V) -> Self {
         return Self {
@@ -129,18 +111,7 @@ where
         self.token.create_table(None)?;
         self.session.create_table(None)?;
         self.user.create_table(None)?;
-        return Ok(());
-    }
-}
 
-impl DiskOpManager<SqliteDiskOpUser, SqliteDiskOpSession, SqliteDiskOpToken> {
-    pub fn new_sqlite(
-        pool: Pool<SqliteConnectionManager>,
-    ) -> DiskOpManager<SqliteDiskOpUser, SqliteDiskOpSession, SqliteDiskOpToken> {
-        return DiskOpManager {
-            user: SqliteDiskOpUser::new(pool.clone()),
-            session: SqliteDiskOpSession::new(pool.clone()),
-            token: SqliteDiskOpToken::new(pool),
-        };
+        return Ok(());
     }
 }

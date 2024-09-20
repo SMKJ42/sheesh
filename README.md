@@ -1,7 +1,5 @@
 :warning: :warning: This library is still in development and is highly insecure :warning: :warning:
 
-:warning: :warning: Hashing algorithm is set to low parameters for development purposes :warning: :warning:
+This library is intended to provide low level control over authentication, but provides default implementation for quickly getting started.
 
-TODO's
-
-create feature flags for different harnesses in Cargo.toml
+This library utilizes both auth tokens and refresh tokens.
