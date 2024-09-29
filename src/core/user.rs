@@ -3,7 +3,7 @@ use std::{error, fmt::Display};
 use crate::harness::{sqlite::SqliteHarnessUser, DbHarnessSession, DbHarnessToken, DbHarnessUser};
 
 use super::{
-    auth_token::AuthTokenError,
+    auth_token::{AuthTokenError, TokenManagerError},
     default_hash_fn, default_rng_salt_fn, default_verify_token_fn,
     id::{DefaultIdGenerator, IdGenerator},
     session::{Session, SessionManager},
@@ -105,18 +105,18 @@ where
 
     pub fn login<Pu, Pr, Id, Sh, Th>(
         &self,
-        session_manager: SessionManager<Id, Sh, Th>,
-        user_id: i64,
+        session_manager: &SessionManager<Id, Sh, Th>,
+        user: &User<Pu, Pr>,
         pwd: &str,
     ) -> Result<(Session, String, String), UserManagerError>
     where
+        Pu: PublicUserMeta,
+        Pr: PrivateUserMeta,
         Id: IdGenerator,
         Sh: DbHarnessSession,
         Th: DbHarnessToken,
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta,
     {
-        let user_res = self.get_user(user_id);
+        let user_res = self.get_user(&user.id);
         let user: User<Pu, Pr>;
 
         match user_res {
@@ -132,13 +132,11 @@ where
             },
         }
 
-        match self.verify_pwd(user, pwd) {
+        match self.verify_pwd(&user, pwd) {
             // Error validating the user, propogate the Error.
             Err(err) => return Err(err.into()),
-            Ok(_) =>
-            // I need a way to access a session...
-            {
-                let sess_res = session_manager.new_session(user_id);
+            Ok(_) => {
+                let sess_res = session_manager.new_session(user.id);
                 match sess_res {
                     Ok(res) => return Ok(res),
                     Err(err) => return Err(err.into()),
@@ -147,7 +145,65 @@ where
         };
     }
 
-    pub fn verify_pwd<Pu, Pr>(&self, user: User<Pu, Pr>, pwd: &str) -> Result<(), AuthTokenError>
+    pub fn logout<Pu, Pr, Id, Sh, Th>(
+        &self,
+        session_manager: &SessionManager<Id, Sh, Th>,
+        user: &User<Pu, Pr>,
+        user_token_atmpt: String,
+    ) -> Result<(), UserManagerError>
+    where
+        Pu: PublicUserMeta,
+        Pr: PrivateUserMeta,
+        Id: IdGenerator,
+        Sh: DbHarnessSession,
+        Th: DbHarnessToken,
+    {
+        match user.session_id {
+            Some(session_id) => match session_manager.read_session(session_id) {
+                Ok(session) => {
+                    match session.refresh_token() {
+                        Some(refresh_token_id) => {
+                            // ensure that the user has the authority to logout -- they have a valid session token
+                            let _ = session_manager.verify_token(
+                                refresh_token_id,
+                                user.id,
+                                user_token_atmpt,
+                            );
+                        }
+                        None => {
+                            /*
+                             * user is already logged out, but we still want to ensure the access token is invalidated.
+                             * This is safe because the state of this branch would be
+                             *
+                             * Session {
+                             *     refresh_token: None
+                             *     access_token: Option<token_id>
+                             * }
+                             *
+                             * We cannot have an access token without a refresh token, and .invalidate_session() will handle flipping the access_token to None.
+                             *
+                             * alternatively we could use unreachable!(), but I dont like the idea of a authentication server panicing.
+                             */
+                        }
+                    }
+                    match session_manager.invalidate_session(session) {
+                        Ok(()) => return Ok(()),
+                        Err(err) => {
+                            return Err(UserManagerError::new(UserManagerErrorKind::FailedLogout(
+                                err,
+                            )))
+                        }
+                    }
+                }
+                Err(err) => return Err(UserManagerError::new(UserManagerErrorKind::Harness(err))),
+            },
+            None => {
+                todo!()
+            }
+        }
+    }
+
+    pub fn verify_pwd<Pu, Pr>(&self, user: &User<Pu, Pr>, pwd: &str) -> Result<(), AuthTokenError>
     where
         Pu: PublicUserMeta,
         Pr: PrivateUserMeta,
@@ -163,12 +219,12 @@ where
         return self.harness.update(&user);
     }
 
-    pub fn get_user<Pu, Pr>(&self, id: i64) -> Result<Option<User<Pu, Pr>>, Box<dyn error::Error>>
+    pub fn get_user<Pu, Pr>(&self, id: &i64) -> Result<Option<User<Pu, Pr>>, Box<dyn error::Error>>
     where
         Pu: PublicUserMeta,
         Pr: PrivateUserMeta,
     {
-        return self.harness.read(id);
+        return self.harness.read(*id);
     }
 
     pub fn delete_user<Pu, Pr>(&self, id: i64) -> Result<(), Box<dyn error::Error>>
@@ -338,14 +394,15 @@ pub trait PrivateUserMeta {}
 
 #[derive(Debug)]
 pub enum UserManagerErrorKind {
-    Harness(Box<dyn error::Error>),
+    FailedLogout(TokenManagerError),
     Token(AuthTokenError),
+    Harness(Box<dyn error::Error>),
     UserNotFound,
 }
 
 #[derive(Debug)]
 pub struct UserManagerError {
-    kind: UserManagerErrorKind,
+    pub kind: UserManagerErrorKind,
 }
 
 impl Display for UserManagerError {

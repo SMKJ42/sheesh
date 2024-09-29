@@ -1,13 +1,24 @@
 use std::fmt::Display;
 
-use sheesh::user::{Group, PrivateUserMeta, PublicUserMeta, Role, User};
-
-use serde::Serialize;
+use sheesh::user::{PrivateUserMeta, PublicUserMeta, Role, User};
 
 // the following trait impls create type safety for you across the application.
 pub enum Roles {
     Admin,
     User,
+}
+
+impl Roles {
+    pub fn to_string(&self) -> String {
+        match self {
+            Self::Admin => return String::from("admin"),
+            Self::User => return String::from("user"),
+        }
+    }
+
+    pub fn as_role(&self) -> Role {
+        return Role::from_string(self.to_string());
+    }
 }
 
 impl Display for Roles {
@@ -23,43 +34,24 @@ impl Display for Roles {
     }
 }
 
-impl Role for Roles {}
-
-pub struct MyPublicUserMetadata {}
+pub struct MyPublicUserMetadata;
 impl PublicUserMeta for MyPublicUserMetadata {
-    fn from_values(values: Vec<String>) -> Self {
-        Self {}
-    }
-    fn into_values(&self) -> Vec<String> {
-        vec![]
-    }
+    // fn from_values(values: &mut slice::Iter<'_, String>) -> Option<Self> {
+    //     None
+    // }
+    // fn into_values(&self) -> Vec<String> {
+    //     vec![]
+    // }
 }
 
-pub struct MyPrivateUserMetadata {}
+pub struct MyPrivateUserMetadata;
 impl PrivateUserMeta for MyPrivateUserMetadata {
-    fn from_values(values: Vec<String>) -> Self {
-        Self {}
-    }
-    fn into_values(&self) -> Vec<String> {
-        vec![]
-    }
+    // fn from_values(values: &mut slice::Iter<'_, String>) -> Option<Self> {
+    //     None
+    // }
+    // fn into_values(&self) -> Vec<String> {
+    //     vec![]
+    // }
 }
 
-pub struct SomeGroup {}
-impl Group for SomeGroup {}
-impl Serialize for SomeGroup {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str("some_group")
-    }
-}
-
-impl Display for SomeGroup {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        return write!(f, "some_group");
-    }
-}
-
-pub type MyUser = User<Roles, SomeGroup, MyPublicUserMetadata, MyPrivateUserMetadata>;
+pub type MyUser = User<MyPublicUserMetadata, MyPrivateUserMetadata>;

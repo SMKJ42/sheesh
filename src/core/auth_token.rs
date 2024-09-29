@@ -123,6 +123,24 @@ where
         }
     }
 
+    pub fn trusted_verify_refresh_token(
+        &self,
+        token_id: i64,
+        user_id: i64,
+        token_str: String,
+    ) -> Result<(), TokenManagerError> {
+        match self.harness.get_refresh_token(token_id) {
+            Ok(token_opt) => match token_opt {
+                Some(auth_token) => match self.verify_token(auth_token, user_id, token_str) {
+                    Ok(()) => return Ok(()),
+                    Err(err) => return Err(err.into()),
+                },
+                None => return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized).into()),
+            },
+            Err(err) => return Err(TokenManagerError::Harness(err)),
+        }
+    }
+
     pub fn verify_token(
         &self,
         auth_token: AuthToken,

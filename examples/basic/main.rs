@@ -1,6 +1,6 @@
 mod types;
 
-use sheesh::{harness::DiskOpManager, session::SessionManagerConfig, user::UserManagerConfig};
+use sheesh::{harness::DbHarness, session::SessionManagerConfig, user::UserManagerConfig};
 
 extern crate r2d2;
 extern crate r2d2_sqlite;
@@ -15,39 +15,43 @@ fn main() {
     let pool = r2d2::Pool::new(conn_manager).unwrap();
 
     // initalize db harness. if you would like to see how to implement your own, look inside the harness modules.
-    let disk_manager = DiskOpManager::new_sqlite(pool);
-    disk_manager.init_tables().unwrap();
+    let harness = DbHarness::new_sqlite(pool);
 
-    let user_manager_config = UserManagerConfig::default();
-    let session_manager_config = SessionManagerConfig::default();
+    // once the harness is selected, go ahead and initialize tables. Init tables creates a table if user, session and token tables do not already exist.
+    harness.init_tables().unwrap();
 
-    // provide db harness to function interfaces.
-    let user_manager = user_manager_config.init(disk_manager.user);
-    let session_manager = session_manager_config.init(disk_manager.session, disk_manager.token);
+    let user_manager = UserManagerConfig::default().init(harness.user);
+    let session_manager = SessionManagerConfig::default().init(harness.session, harness.token);
 
     let mut i = 0;
 
     loop {
-        let mut user: MyUser = user_manager
+        let user: MyUser = user_manager
             .create_user(
                 "test".to_string(),
                 "pwd".to_string(),
-                Roles::Admin,
-                Some(MyPublicUserMetadata {}),
-                Some(MyPrivateUserMetadata {}),
+                Roles::Admin.as_role(),
+                Some(MyPublicUserMetadata),
+                Some(MyPrivateUserMetadata),
             )
             .unwrap();
 
-        let public = MyPublicUserMetadata {};
-        let private = MyPrivateUserMetadata {};
+        let pwd_str = "pwd";
 
-        user.set_public_data(Some(public));
-        user.set_private_data(Some(private));
+        match user_manager.login(&session_manager, &user, pwd_str) {
+            Ok((mut session, refresh_secret, _access_secret)) => {
+                // creating a new access token...
+                let _access_secret = session_manager
+                    .create_new_access_token(&mut session, user.id)
+                    .unwrap();
 
-        let (mut session, mut auth_token, refresh_token) =
-            session_manager.new_session(user.id()).unwrap();
-
-        // let mut new_token = session_manager.refresh_session_token(&mut session).unwrap();
+                // creating a new sesson token...
+                let (_refresh_secret, _access_secret) = session_manager
+                    .create_new_refresh_token(session, user.id, refresh_secret)
+                    .unwrap();
+            }
+            Err(_err) => {}
+        }
 
         println!("{}", i);
         i += 1;
