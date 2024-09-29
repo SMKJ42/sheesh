@@ -2,7 +2,7 @@ use std::error;
 
 use crate::harness::{
     sqlite::{SqliteHarnessSession, SqliteHarnessToken},
-    DbHarnessSession, DbHarnessToken,
+    DbHarnessSession, DbHarnessToken, HarnessError,
 };
 
 use super::{
@@ -108,7 +108,7 @@ where
         &self,
         token_id: i64,
         user_id: i64,
-        user_token_atmpt: String,
+        user_token_atmpt: &str,
     ) -> Result<(), TokenManagerError> {
         self.token_manager
             .trusted_verify_refresh_token(token_id, user_id, user_token_atmpt)
@@ -150,7 +150,7 @@ where
         &self,
         mut session: Session,
         user_id: i64,
-        user_token_atmpt: String,
+        user_token_atmpt: &str,
     ) -> Result<(String, String), TokenManagerError> {
         let refresh_token: Option<AuthToken>;
 
@@ -259,6 +259,19 @@ where
         match self.harness.update(&session) {
             Err(err) => return Err(TokenManagerError::Harness(err)),
             Ok(()) => Ok(()),
+        }
+    }
+
+    pub fn invalidate_access_token(&self, mut session: Session) -> Result<(), TokenManagerError> {
+        match session.access_token {
+            Some(token_id) => match self.token_manager.delete_access_token(token_id) {
+                Ok(()) => {
+                    session.access_token = None;
+                    return Ok(());
+                }
+                Err(err) => return Err(TokenManagerError::Harness(err)),
+            },
+            None => todo!(),
         }
     }
 }

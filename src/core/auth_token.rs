@@ -127,7 +127,7 @@ where
         &self,
         token_id: i64,
         user_id: i64,
-        token_str: String,
+        token_str: &str,
     ) -> Result<(), TokenManagerError> {
         match self.harness.get_refresh_token(token_id) {
             Ok(token_opt) => match token_opt {
@@ -145,7 +145,7 @@ where
         &self,
         auth_token: AuthToken,
         user_id: i64,
-        token_str: String,
+        token_str: &str,
     ) -> Result<(), AuthTokenError> {
         if user_id != auth_token.user_id {
             return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized));
@@ -200,12 +200,12 @@ where
 #[derive(Debug)]
 pub enum TokenManagerError {
     Harness(Box<dyn error::Error>),
-    AccessToken(AuthTokenError),
+    AuthToken(AuthTokenError),
 }
 
 impl From<AuthTokenError> for TokenManagerError {
     fn from(value: AuthTokenError) -> Self {
-        return Self::AccessToken(value);
+        return Self::AuthToken(value);
     }
 }
 

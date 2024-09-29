@@ -80,7 +80,7 @@ where
         role: Role,
         public: Option<Pu>,
         private: Option<Pr>,
-    ) -> Result<User<Pu, Pr>, Box<dyn error::Error>>
+    ) -> Result<User<Pu, Pr>, UserManagerError>
     where
         Pu: PublicUserMeta,
         Pr: PrivateUserMeta,
@@ -149,7 +149,7 @@ where
         &self,
         session_manager: &SessionManager<Id, Sh, Th>,
         user: &User<Pu, Pr>,
-        user_token_atmpt: String,
+        user_token_atmpt: &str,
     ) -> Result<(), UserManagerError>
     where
         Pu: PublicUserMeta,
@@ -164,11 +164,16 @@ where
                     match session.refresh_token() {
                         Some(refresh_token_id) => {
                             // ensure that the user has the authority to logout -- they have a valid session token
-                            let _ = session_manager.verify_token(
+                            match session_manager.verify_token(
                                 refresh_token_id,
                                 user.id,
                                 user_token_atmpt,
-                            );
+                            ) {
+                                // token was verified.
+                                Ok(()) => return Ok(()),
+                                // token was invalid.
+                                Err(err) => return Err(err.into()),
+                            }
                         }
                         None => {
                             /*
@@ -189,16 +194,18 @@ where
                     match session_manager.invalidate_session(session) {
                         Ok(()) => return Ok(()),
                         Err(err) => {
-                            return Err(UserManagerError::new(UserManagerErrorKind::FailedLogout(
-                                err,
-                            )))
+                            return Err(UserManagerError::new(
+                                UserManagerErrorKind::SessionInvalidation(err),
+                            ))
                         }
                     }
                 }
                 Err(err) => return Err(UserManagerError::new(UserManagerErrorKind::Harness(err))),
             },
             None => {
-                todo!()
+                return Err(UserManagerError::new(
+                    UserManagerErrorKind::AlreadyLoggedOut,
+                ))
             }
         }
     }
@@ -394,10 +401,22 @@ pub trait PrivateUserMeta {}
 
 #[derive(Debug)]
 pub enum UserManagerErrorKind {
-    FailedLogout(TokenManagerError),
+    // Error can be in the harness, or in the token validation. This will occure only after the user and token are verified and the logout fails.
+    SessionInvalidation(TokenManagerError),
+    AlreadyLoggedOut,
+    // Error resides strictly in the Token, not in the harness.
     Token(AuthTokenError),
     Harness(Box<dyn error::Error>),
     UserNotFound,
+}
+
+impl From<TokenManagerError> for UserManagerError {
+    fn from(value: TokenManagerError) -> Self {
+        match value {
+            TokenManagerError::AuthToken(err) => Self::new(UserManagerErrorKind::Token(err)),
+            TokenManagerError::Harness(err) => Self::new(UserManagerErrorKind::Harness(err)),
+        }
+    }
 }
 
 #[derive(Debug)]
