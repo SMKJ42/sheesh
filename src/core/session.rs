@@ -1,167 +1,256 @@
 use std::error;
 
-use chrono::{DateTime, Utc};
-
 use crate::harness::{
-    sqlite::{SqliteDiskOpSession, SqliteDiskOpToken},
-    DiskOpSession, DiskOpToken,
+    sqlite::{SqliteHarnessSession, SqliteHarnessToken},
+    DbHarnessSession, DbHarnessToken,
 };
 
 use super::{
-    auth_token::{AuthTokenManager, AuthTokenManagerConfig},
-    get_token_expiry,
+    auth_token::{
+        AuthToken, AuthTokenError, AuthTokenErrorKind, AuthTokenManager, AuthTokenManagerConfig,
+        TokenManagerError, TokenTtl,
+    },
     id::{DefaultIdGenerator, IdGenerator},
 };
 
-pub struct SessionManagerConfig<'a, T>
+// Session naming convention may be a bit misleading. it is really to handle the refresh token on the auth server iteself...
+// the client server will also have a session entity representing the user's session within the application
+pub struct SessionManagerConfig<T>
 where
     T: IdGenerator,
 {
     id_generator: T,
-    token_generator_config: AuthTokenManagerConfig<'a, T>,
+    token_manager_config: AuthTokenManagerConfig<T>,
     ttl: i64,
 }
 
-impl<'a> Default for SessionManagerConfig<'a, DefaultIdGenerator> {
+impl Default for SessionManagerConfig<DefaultIdGenerator> {
     fn default() -> Self {
         return Self {
             id_generator: DefaultIdGenerator {},
-            token_generator_config: AuthTokenManagerConfig::default(),
-            ttl: 120,
+            token_manager_config: AuthTokenManagerConfig::default(),
+            ttl: 240,
         };
     }
 }
 
-impl<'a, T> SessionManagerConfig<'a, T>
+impl<T> SessionManagerConfig<T>
 where
     T: IdGenerator + Copy,
 {
-    pub fn init<V: DiskOpSession, Y: DiskOpToken>(
+    pub fn init<V: DbHarnessSession, Y: DbHarnessToken>(
         &self,
         session_harness: V,
         token_harness: Y,
-    ) -> SessionManager<'a, T, V, Y> {
+    ) -> SessionManager<T, V, Y> {
         return SessionManager {
             id_generator: self.id_generator,
             harness: session_harness,
             ttl: self.ttl,
-            token_generator: self.token_generator_config.init(token_harness),
+            token_manager: self.token_manager_config.init(token_harness),
         };
     }
 }
 
-pub struct SessionManager<'a, T, V, X>
+pub struct SessionManager<T, V, X>
 where
     T: IdGenerator,
-    V: DiskOpSession,
-    X: DiskOpToken,
+    V: DbHarnessSession,
+    X: DbHarnessToken,
 {
     id_generator: T,
-    token_generator: AuthTokenManager<'a, T, X>,
+    token_manager: AuthTokenManager<T, X>,
     harness: V,
     ttl: i64,
 }
 
-impl<'a> SessionManager<'a, DefaultIdGenerator, SqliteDiskOpSession, SqliteDiskOpToken> {}
+impl SessionManager<DefaultIdGenerator, SqliteHarnessSession, SqliteHarnessToken> {}
 
-impl<'a, T, X> SessionManager<'a, T, SqliteDiskOpSession, X>
+impl<T, X> SessionManager<T, SqliteHarnessSession, X>
 where
     T: IdGenerator,
-    X: DiskOpToken,
+    X: DbHarnessToken,
 {
 }
 
-/// Takes in a user_id, and returns the session and associated secrets ->
-/// (session: Session, auth_secret: String, refresh_secret: String)  
-impl<'a, T, V, X> SessionManager<'a, T, V, X>
+impl<T, V, X> SessionManager<T, V, X>
 where
     T: IdGenerator,
-    V: DiskOpSession,
-    X: DiskOpToken,
+    V: DbHarnessSession,
+    X: DbHarnessToken,
 {
     pub fn new_session(
         &self,
-        user_id: u64,
+        user_id: i64,
     ) -> Result<(Session, String, String), Box<dyn error::Error>> {
         let id = self.id_generator.new_u64();
 
-        let (auth_token, auth_secret) = self.token_generator.next_token()?;
-        let (refresh_token, refresh_secret) = self.token_generator.next_token()?;
+        let (auth_token, auth_secret) = self.token_manager.next_token(user_id, TokenTtl::Access)?;
 
-        let expires = get_token_expiry(self.ttl)?;
+        let (refresh_token, refresh_secret) = self
+            .token_manager
+            .next_token(user_id, TokenTtl::Refresh(self.ttl))?;
 
         let session = Session {
-            id,
+            // shift to bytes then into i64 (DO NOT CAST, we want to preserve the bit values)
+            id: i64::from_be_bytes(id.to_be_bytes()),
             user_id,
             refresh_token: Some(refresh_token.id()),
             auth_token: Some(auth_token.id()),
-            expires,
         };
         self.harness.insert(&session)?;
 
         return Ok((session, auth_secret, refresh_secret));
     }
 
-    /// Updates the sessions with a new session token ->
-    /// secret: String
-    pub fn issue_new_auth_token(
+    pub fn read_session(&self, id: i64) -> Result<Session, Box<dyn error::Error>> {
+        return self.harness.read(id);
+    }
+
+    pub fn create_new_access_token(
         &self,
         session: &mut Session,
+        user_id: i64,
     ) -> Result<String, Box<dyn error::Error>> {
-        let (new_token, auth_token_secret) = self.token_generator.next_token()?;
+        // cleanup old token
+        if session.auth_token.is_some() {
+            self.token_manager
+                .delete_access_token(session.auth_token.unwrap())?;
+        }
+
+        // create a new token, the 'token_manager' harness will handle database insertion.
+        let (new_token, auth_token_secret) =
+            self.token_manager.next_token(user_id, TokenTtl::Access)?;
 
         session.auth_token = Some(new_token.id());
 
-        todo!("insert new token into db, cleanup old token, return the secret")
+        //update the session with the new token id.
+        self.harness.update(session)?;
+
+        return Ok(auth_token_secret);
     }
 
-    pub fn issue_new_refresh_token(
+    pub fn create_new_refresh_token(
         &self,
-        session: &mut Session,
-    ) -> Result<String, Box<dyn error::Error>> {
-        let (new_token, refresh_token_secret) = self.token_generator.next_token()?;
+        mut session: Session,
+        token_str: String,
+        user_id: i64,
+    ) -> Result<String, TokenManagerError> {
+        let refresh_token_res: Result<Option<AuthToken>, Box<dyn error::Error>>;
 
+        // if the session has a None value in the session token, there is no 'old' refresh token to check.
+        match session.refresh_token {
+            Some(token_id) => {
+                refresh_token_res = self.token_manager.get_refresh_token(token_id);
+            }
+            None => {
+                return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized).into());
+            }
+        }
+
+        /*
+         *   this is a nasty block of code, apologies.
+         */
+
+        // check for harness error.
+        match refresh_token_res {
+            // check to ensure we obtained a token.
+            Ok(refresh_token) => {
+                match &refresh_token {
+                    // if we obtained a token, validate it.
+                    Some(token) => {
+                        match self
+                            .token_manager
+                            .verify_token(token.clone(), user_id, token_str)
+                        {
+                            Ok(_) => {
+                                // The provided token is valid, we can continue...
+                            }
+
+                            Err(err) => {
+                                match err.kind {
+                                    AuthTokenErrorKind::Expired | AuthTokenErrorKind::Invalid => {
+                                        // if we hit this area, someone has accessed an expired or invalidated refresh token.
+                                        // When this happens, we want to invalidate the session and return an error.
+                                        self.set_token_ids_none(session)?;
+
+                                        // Change the error to reflect the new state of the session.
+                                        return Err(AuthTokenError::new(
+                                            AuthTokenErrorKind::NotAuthorized,
+                                        )
+                                        .into());
+                                    }
+                                    _ => {
+                                        // propogate the wildcard error
+                                        return Err(err.into());
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // No token found in the database, return an error...
+                    None => {
+                        return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized).into());
+                    }
+                }
+            }
+
+            // the harness failed to fetch the provided refresh token, return an error...
+            Err(err) => return Err(TokenManagerError::Harness(err)),
+        }
+
+        // create the new token
+        let (new_token, refresh_token_secret) = self
+            .token_manager
+            .next_token(user_id, TokenTtl::Refresh(self.ttl))?;
+
+        // save the token to the session
         session.refresh_token = Some(new_token.id());
+        match self.harness.update(&session) {
+            Ok(()) => return Ok(refresh_token_secret),
+            Err(err) => return Err(TokenManagerError::Harness(err)),
+        }
+    }
 
-        todo!("insert new token into db, cleanup old token, return the secret")
+    pub fn set_token_ids_none(&self, mut session: Session) -> Result<(), TokenManagerError> {
+        session.auth_token = None;
+        session.refresh_token = None;
+        match self.harness.update(&session) {
+            Err(err) => return Err(TokenManagerError::Harness(err)),
+            Ok(()) => Ok(()),
+        }
+    }
+
+    /// currently the equivalent to Self::set_token_ids_none(), but there are plans to change sessions to
+    /// have their own lifetime seperate from the refresh_tokens.
+    pub fn invalidate_session(&self, session: Session) -> Result<(), TokenManagerError> {
+        return self.set_token_ids_none(session);
     }
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Session {
-    id: u64,
-    user_id: u64,
-    refresh_token: Option<u64>,
-    auth_token: Option<u64>,
-    expires: DateTime<Utc>,
+    id: i64,
+    user_id: i64,
+    refresh_token: Option<i64>,
+    auth_token: Option<i64>,
 }
 
 impl Session {
-    pub fn id(&self) -> u64 {
+    pub fn id(&self) -> i64 {
         return self.id;
     }
 
-    pub fn user_id(&self) -> u64 {
+    pub fn user_id(&self) -> i64 {
         return self.user_id;
     }
 
-    pub fn refresh_token(&self) -> Option<u64> {
+    pub fn refresh_token(&self) -> Option<i64> {
         return self.refresh_token;
     }
 
-    pub fn auth_token(&self) -> Option<u64> {
+    pub fn auth_token(&self) -> Option<i64> {
         return self.auth_token;
-    }
-
-    pub fn expires(&self) -> DateTime<Utc> {
-        return self.expires;
-    }
-
-    pub fn from_values(values: Vec<String>) -> Self {
-        unimplemented!()
-    }
-
-    pub fn into_values(&self) -> Vec<String> {
-        unimplemented!()
     }
 }

@@ -1,5 +1,17 @@
-:warning: :warning: This library is still in development and is highly insecure :warning: :warning:
+:warning: :warning: This library is still in development and WILL break :warning: :warning:
 
-This library is intended to provide low level control over authentication, but provides default implementation for quickly getting started.
+Ever wanted to host your own authentication? No? well nobody really WANTs to. But just in case you HAVE to, here you go.
 
-This library utilizes both auth tokens and refresh tokens.
+Sheesh-auth does not follow any particular protocol, roast me.
+
+User passwords and refresh token secrets stored salted and hashed while access tokens are stored as plaintext.
+Sessions currently cannot be refreshed, but refresh tokens allow for a longer lived access token strategy.
+
+User data is extensible.
+
+Plug and play or custom hashing, salting, and id generating strategies.
+
+Plug and play or custom db harness for easy integration into a SQLite database.
+
+Wanna contribute? I'm planning to also make a Postgress and MySQL harness.
+Don't want to contribute? Alright then, keep your secrets wizard. Harnesses are designed to be modular, so create your own.
