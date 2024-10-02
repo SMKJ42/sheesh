@@ -1,6 +1,6 @@
 use std::{error, fmt::Display};
 
-use crate::harness::{sqlite::SqliteHarnessUser, DbHarnessSession, DbHarnessToken, DbHarnessUser};
+use crate::harness::{DbHarnessSession, DbHarnessToken, DbHarnessUser};
 
 use super::{
     auth_token::{AuthTokenError, TokenManagerError},
@@ -65,8 +65,6 @@ where
     hash_fn: fn(&str, &str) -> Result<String, AuthTokenError>,
     verify_pass_fn: fn(&str, &str) -> Result<(), AuthTokenError>,
 }
-
-impl UserManager<DefaultIdGenerator, SqliteHarnessUser> {}
 
 impl<T, V> UserManager<T, V>
 where
@@ -226,6 +224,23 @@ where
         return self.harness.update(&user);
     }
 
+    pub fn update_password<Pu, Pr>(
+        &self,
+        mut user: User<Pu, Pr>,
+        pwd: String,
+    ) -> Result<usize, Box<dyn error::Error>>
+    where
+        Pu: PublicUserMeta,
+        Pr: PrivateUserMeta,
+    {
+        let salt = (self.salt_fn)();
+        let secret = (self.hash_fn)(&pwd, &salt)?;
+
+        user.set_secret(secret);
+
+        return self.harness.update(&user);
+    }
+
     pub fn get_user<Pu, Pr>(&self, id: &i64) -> Result<Option<User<Pu, Pr>>, Box<dyn error::Error>>
     where
         Pu: PublicUserMeta,
@@ -249,15 +264,15 @@ where
     Pu: PublicUserMeta,
     Pr: PrivateUserMeta,
 {
-    pub id: i64,
-    pub session_id: Option<i64>,
-    pub username: String,
-    pub secret: String,
-    pub ban: bool,
-    pub groups: Groups,
-    pub role: Role,
-    pub public: Option<Pu>,
-    pub private: Option<Pr>,
+    id: i64,
+    session_id: Option<i64>,
+    username: String,
+    secret: String,
+    ban: bool,
+    groups: Groups,
+    role: Role,
+    public: Option<Pu>,
+    private: Option<Pr>,
 }
 
 impl<Pu, Pr> User<Pu, Pr>
@@ -286,28 +301,78 @@ where
         });
     }
 
+    pub fn id(&self) -> i64 {
+        return self.id;
+    }
+
+    pub fn username(&self) -> &str {
+        return &self.username;
+    }
+
+    pub fn set_username(&mut self, username: String) {
+        self.username = username;
+    }
+
+    pub fn secret(&self) -> &str {
+        return &self.secret;
+    }
+
+    fn set_secret(&mut self, secret: String) {
+        self.secret = secret;
+    }
+
+    pub fn is_banned(&self) -> bool {
+        return self.ban;
+    }
+
+    pub fn ban(&mut self) {
+        self.ban = true;
+    }
+
+    pub fn unban(&mut self) {
+        self.ban = false;
+    }
+
+    pub fn groups(&self) -> &Groups {
+        return &self.groups;
+    }
+
+    pub fn role(&self) -> &Role {
+        return &self.role;
+    }
+
+    pub fn set_role(&mut self, role: Role) {
+        self.role = role;
+    }
+
     pub fn session_id(&self) -> Option<i64> {
         return self.session_id;
+    }
+
+    pub fn public(&self) -> Option<Pu> {
+        return self.public.clone();
+    }
+
+    pub fn set_public(&mut self, public: Option<Pu>) {
+        self.public = public;
+    }
+
+    pub fn private(&self) -> Option<Pr> {
+        return self.private.clone();
+    }
+
+    pub fn set_private(&mut self, private: Option<Pr>) {
+        self.private = private;
     }
 }
 
 impl<Pu: PublicUserMeta, Pr: PrivateUserMeta> User<Pu, Pr> {
     pub fn remove_group(&mut self, group: Group) {
-        let idx = self.groups.position(group);
-
-        match idx {
-            Some(idx) => {
-                self.groups.remove(idx);
-            }
-            None => {}
-        }
+        self.groups.remove_group(group);
     }
 
     pub fn add_group(&mut self, group: Group) {
-        if self.groups.contains(group.clone()) {
-        } else {
-            self.groups.push(group)
-        }
+        self.groups.add_group(group);
     }
 }
 
@@ -353,51 +418,65 @@ impl Group {
     }
 }
 
+impl IntoIterator for Groups {
+    type Item = Group;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.groups.into_iter()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Groups {
     groups: Vec<Group>,
-    pub string: String,
 }
 
 impl Groups {
     pub fn new() -> Self {
-        return Self {
-            groups: Vec::new(),
-            string: String::new(),
-        };
+        return Self { groups: Vec::new() };
     }
 }
 
 impl Groups {
     pub fn contains(&self, group: Group) -> bool {
+        return self.groups.contains(&group);
+    }
+
+    pub fn add_group(&mut self, group: Group) {
         for c_group in &self.groups {
             if *c_group == group {
-                return true;
+                return;
             }
         }
-        return false;
+        self.groups.push(group);
     }
 
-    pub fn remove(&mut self, idx: usize) {
-        let mut str_groups: Vec<&str> = self.string.split(',').collect();
+    pub fn remove_group(&mut self, group: Group) {
+        let mut idx = 0;
+        for c_group in &self.groups {
+            if *c_group == group {
+                return;
+            }
+            idx += 1;
+        }
+
         self.groups.remove(idx);
-        str_groups.remove(idx);
-        self.string = str_groups.join(",");
     }
 
-    pub fn push(&mut self, group: Group) {
-        self.groups.push(group.clone());
-        self.string.push_str(group.as_str())
-    }
+    pub fn to_string(&self) -> String {
+        let mut string = String::new();
 
-    pub fn position(&self, group: Group) -> Option<usize> {
-        return self.groups.iter().position(|x| *x == group);
+        for group in &self.groups {
+            string += group.as_str()
+        }
+
+        return string;
     }
 }
 
-pub trait PublicUserMeta {}
+pub trait PublicUserMeta: Clone {}
 
-pub trait PrivateUserMeta {}
+pub trait PrivateUserMeta: Clone {}
 
 #[derive(Debug)]
 pub enum UserManagerErrorKind {

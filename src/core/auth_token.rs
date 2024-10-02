@@ -1,4 +1,4 @@
-use crate::harness::{sqlite::SqliteHarnessToken, DbHarnessToken};
+use crate::harness::DbHarnessToken;
 use std::{
     error,
     fmt::{Debug, Display},
@@ -77,8 +77,6 @@ where
     harness: V,
 }
 
-impl<T> AuthTokenManager<T, SqliteHarnessToken> where T: IdGenerator {}
-
 impl<T, V> AuthTokenManager<T, V>
 where
     T: IdGenerator,
@@ -156,7 +154,7 @@ where
                 if token != &token_str {
                     return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized));
                 } else if auth_token.is_expired() {
-                    // try to clean up, if fails, we can clean up later with a chron job.
+                    // try to clean up, if fails, we can clean up later with a cron job.
                     let _ = self.harness.delete_access_token(auth_token.id());
                     return Err(AuthTokenError::new(AuthTokenErrorKind::Expired));
                 } else {

@@ -1,9 +1,6 @@
 use std::error;
 
-use crate::harness::{
-    sqlite::{SqliteHarnessSession, SqliteHarnessToken},
-    DbHarnessSession, DbHarnessToken, HarnessError,
-};
+use crate::harness::{DbHarnessSession, DbHarnessToken};
 
 use super::{
     auth_token::{
@@ -62,15 +59,6 @@ where
     token_manager: AuthTokenManager<T, X>,
     harness: V,
     ttl: i64,
-}
-
-impl SessionManager<DefaultIdGenerator, SqliteHarnessSession, SqliteHarnessToken> {}
-
-impl<T, X> SessionManager<T, SqliteHarnessSession, X>
-where
-    T: IdGenerator,
-    X: DbHarnessToken,
-{
 }
 
 impl<T, V, X> SessionManager<T, V, X>
