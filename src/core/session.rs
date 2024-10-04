@@ -273,6 +273,20 @@ pub struct Session {
 }
 
 impl Session {
+    pub fn from_values(
+        id: i64,
+        user_id: i64,
+        refresh_token: Option<i64>,
+        access_token: Option<i64>,
+    ) -> Self {
+        return Self {
+            id,
+            user_id,
+            refresh_token,
+            access_token,
+        };
+    }
+
     pub fn id(&self) -> i64 {
         return self.id;
     }

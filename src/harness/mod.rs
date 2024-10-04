@@ -2,12 +2,12 @@ pub mod mysql;
 pub mod postgresql;
 pub mod sqlite;
 
-use std::error;
+use std::{error, fmt::Display};
 
 use crate::{
     auth_token::AuthToken,
     session::Session,
-    user::{Group, PrivateUserMeta, PublicUserMeta, Role, User},
+    user::{PrivateUserMeta, PublicUserMeta, User},
 };
 
 pub enum Db {
@@ -16,52 +16,72 @@ pub enum Db {
     Sqlite,
 }
 
-pub trait DiskOpUser {
-    fn read<R, G, Pu, Pr>(&self, id: i64) -> Result<User<R, G, Pu, Pr>, Box<dyn error::Error>>
+#[derive(Debug)]
+pub struct HarnessError(Box<dyn error::Error>);
+
+impl HarnessError {
+    pub fn new(err: Box<dyn error::Error>) -> Self {
+        return Self(err);
+    }
+}
+
+impl error::Error for HarnessError {}
+
+impl Display for HarnessError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        return write!(f, "Harness Error: {}", self.0);
+    }
+}
+
+impl From<Box<dyn error::Error>> for HarnessError {
+    fn from(value: Box<dyn error::Error>) -> Self {
+        return Self(value);
+    }
+}
+
+pub trait DbHarnessUser {
+    fn create_table(&self, sql_string: Option<String>) -> Result<(), Box<dyn error::Error>>;
+    fn read<'a, Pu, Pr>(&self, id: i64) -> Result<Option<User<Pu, Pr>>, Box<dyn error::Error>>
     where
-        R: Role,
-        G: Group,
         Pu: PublicUserMeta,
         Pr: PrivateUserMeta;
 
-    fn update<R, G, Pu, Pr>(&self, item: &User<R, G, Pu, Pr>) -> Result<(), Box<dyn error::Error>>
+    fn update<Pu, Pr>(&self, item: &User<Pu, Pr>) -> Result<usize, Box<dyn error::Error>>
     where
-        R: Role,
-        G: Group,
         Pu: PublicUserMeta,
         Pr: PrivateUserMeta;
 
-    fn insert<R, G, Pu, Pr>(&self, item: &User<R, G, Pu, Pr>) -> Result<(), Box<dyn error::Error>>
+    fn insert<Pu, Pr>(&self, item: &User<Pu, Pr>) -> Result<(), Box<dyn error::Error>>
     where
-        R: Role,
-        G: Group,
         Pu: PublicUserMeta,
         Pr: PrivateUserMeta;
 
     fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
-    fn create_table(&self, sql_string: Option<String>) -> Result<(), Box<dyn error::Error>>;
     fn write_role(&self) -> Result<(), Box<dyn error::Error>>;
     fn insert_group(&self) -> Result<(), Box<dyn error::Error>>;
     fn remove_group(&self) -> Result<(), Box<dyn error::Error>>;
+    // change signature to fn(pu: PublicUserMeta) -> SqlString ?
     fn update_public(&self) -> Result<(), Box<dyn error::Error>>;
     fn update_private(&self) -> Result<(), Box<dyn error::Error>>;
     fn ban(&self) -> Result<(), Box<dyn error::Error>>;
 }
 
-pub trait DiskOpSession {
+pub trait DbHarnessSession {
+    fn create_table(&self) -> Result<(), Box<dyn error::Error>>;
     fn read(&self, id: i64) -> Result<Session, Box<dyn error::Error>>;
-    fn update(&self, item: &Session) -> Result<(), Box<dyn error::Error>>;
-    fn insert(&self, item: &Session) -> Result<(), Box<dyn error::Error>>;
+    fn update(&self, session: &Session) -> Result<(), Box<dyn error::Error>>;
+    fn insert(&self, session: &Session) -> Result<(), Box<dyn error::Error>>;
     fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
-    fn create_table(&self, sql_string: Option<String>) -> Result<(), Box<dyn error::Error>>;
 }
 
-pub trait DiskOpToken {
-    fn read(&self, id: i64) -> Result<AuthToken, Box<dyn error::Error>>;
-    fn update(&self, item: &AuthToken) -> Result<(), Box<dyn error::Error>>;
-    fn insert(&self, item: &AuthToken) -> Result<(), Box<dyn error::Error>>;
-    fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
-    fn create_table(&self, sql_string: Option<String>) -> Result<(), Box<dyn error::Error>>;
+pub trait DbHarnessToken {
+    fn create_table(&self) -> Result<(), Box<dyn error::Error>>;
+    fn update(&self, token: &AuthToken) -> Result<(), Box<dyn error::Error>>;
+    fn insert(&self, token: &AuthToken) -> Result<(), Box<dyn error::Error>>;
+    fn delete_access_token(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
+    fn delete_resfresh_token(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
+    fn read_refresh_token(&self, id: i64) -> Result<Option<AuthToken>, Box<dyn error::Error>>;
+    fn read_access_token(&self, id: i64) -> Result<Option<AuthToken>, Box<dyn error::Error>>;
 }
 
 pub fn repeat_vars(count: usize) -> String {
@@ -82,22 +102,22 @@ pub fn repeat_fields(cols: Vec<String>) -> String {
     return fields;
 }
 
-pub struct DiskOpManager<T, U, V>
+pub struct DbHarness<T, U, V>
 where
-    T: DiskOpUser,
-    U: DiskOpSession,
-    V: DiskOpToken,
+    T: DbHarnessUser,
+    U: DbHarnessSession,
+    V: DbHarnessToken,
 {
     pub user: T,
     pub session: U,
     pub token: V,
 }
 
-impl<T, U, V> DiskOpManager<T, U, V>
+impl<T, U, V> DbHarness<T, U, V>
 where
-    T: DiskOpUser,
-    U: DiskOpSession,
-    V: DiskOpToken,
+    T: DbHarnessUser,
+    U: DbHarnessSession,
+    V: DbHarnessToken,
 {
     pub fn new_custom(user: T, session: U, token: V) -> Self {
         return Self {
@@ -107,9 +127,9 @@ where
         };
     }
 
-    pub fn init_tables(&self) -> Result<(), Box<dyn error::Error>> {
-        self.token.create_table(None)?;
-        self.session.create_table(None)?;
+    pub fn init_tables(&self) -> Result<(), HarnessError> {
+        self.token.create_table()?;
+        self.session.create_table()?;
         self.user.create_table(None)?;
 
         return Ok(());

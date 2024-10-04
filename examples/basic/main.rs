@@ -42,13 +42,18 @@ fn main() {
             Ok((mut session, refresh_secret, _access_secret)) => {
                 // creating a new access token...
                 let _access_secret = session_manager
-                    .create_new_access_token(&mut session, user.id)
+                    .create_new_access_token(&mut session, user.id())
                     .unwrap();
 
                 // creating a new sesson token...
                 let (_refresh_secret, _access_secret) = session_manager
-                    .create_new_refresh_token(session, user.id, refresh_secret)
+                    .create_new_refresh_token(session, user.id(), &refresh_secret)
                     .unwrap();
+
+                match user_manager.logout(&session_manager, &user, &refresh_secret) {
+                    Ok(()) => {}
+                    Err(err) => {}
+                }
             }
             Err(_err) => {}
         }

@@ -33,7 +33,7 @@ impl Display for Roles {
         }
     }
 }
-
+#[derive(Clone)]
 pub struct MyPublicUserMetadata;
 impl PublicUserMeta for MyPublicUserMetadata {
     // fn from_values(values: &mut slice::Iter<'_, String>) -> Option<Self> {
@@ -44,6 +44,7 @@ impl PublicUserMeta for MyPublicUserMetadata {
     // }
 }
 
+#[derive(Clone)]
 pub struct MyPrivateUserMetadata;
 impl PrivateUserMeta for MyPrivateUserMetadata {
     // fn from_values(values: &mut slice::Iter<'_, String>) -> Option<Self> {

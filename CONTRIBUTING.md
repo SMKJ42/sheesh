@@ -7,5 +7,6 @@ Wanna contribute?
 -   Create bin crate with out of the box server functionality utilizing this crate.
 -   Bind tokens to user's geographic location
 -   Bind tokens to user's device
+-   Limit Session lifetime
 
 Don't want to contribute? Alright then, keep your secrets wizard.

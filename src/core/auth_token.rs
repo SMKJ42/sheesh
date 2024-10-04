@@ -12,7 +12,7 @@ use chrono::{offset::LocalResult, DateTime, TimeDelta, Utc};
 
 #[derive(Debug, Clone)]
 pub enum TokenType {
-    Refresh { secret: String, valid: bool },
+    Refresh { secret: String },
     Access { token: String },
 }
 
@@ -99,7 +99,6 @@ where
                 secret = (self.hash_fn)(&token, &salt)?;
                 let token_type = TokenType::Refresh {
                     secret: secret.clone(),
-                    valid: true,
                 };
 
                 auth_token = AuthToken::new(id, user_id, token_type, ttl)?;
@@ -127,7 +126,7 @@ where
         user_id: i64,
         token_str: &str,
     ) -> Result<(), TokenManagerError> {
-        match self.harness.get_refresh_token(token_id) {
+        match self.harness.read_refresh_token(token_id) {
             Ok(token_opt) => match token_opt {
                 Some(auth_token) => match self.verify_token(auth_token, user_id, token_str) {
                     Ok(()) => return Ok(()),
@@ -147,6 +146,8 @@ where
     ) -> Result<(), AuthTokenError> {
         if user_id != auth_token.user_id {
             return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized));
+        } else if auth_token.valid == false {
+            return Err(AuthTokenError::new(AuthTokenErrorKind::Invalid));
         }
 
         match &auth_token.token_type {
@@ -161,10 +162,7 @@ where
                     return Ok(());
                 }
             }
-            TokenType::Refresh { secret, valid } => {
-                if valid == &false {
-                    return Err(AuthTokenError::new(AuthTokenErrorKind::Invalid));
-                }
+            TokenType::Refresh { secret } => {
                 if auth_token.is_expired() {
                     return Err(AuthTokenError::new(AuthTokenErrorKind::Expired));
                 } else {
@@ -179,11 +177,18 @@ where
     }
 
     pub fn get_access_token(&self, id: i64) -> Result<Option<AuthToken>, Box<dyn error::Error>> {
-        self.harness.get_access_token(id)
+        self.harness.read_access_token(id)
+    }
+
+    // ewww....
+    pub fn invalidate_token(&self, mut token: AuthToken) -> Result<(), Box<dyn error::Error>> {
+        token.valid = false;
+        self.harness.update(&token);
+        return Ok(());
     }
 
     pub fn get_refresh_token(&self, id: i64) -> Result<Option<AuthToken>, Box<dyn error::Error>> {
-        self.harness.get_refresh_token(id)
+        self.harness.read_refresh_token(id)
     }
 
     pub fn delete_access_token(&self, id: i64) -> Result<(), Box<dyn error::Error>> {
@@ -221,6 +226,7 @@ pub struct AuthToken {
     user_id: i64,
     token_type: TokenType,
     expires: DateTime<Utc>,
+    valid: bool,
 }
 
 impl AuthToken {
@@ -238,11 +244,36 @@ impl AuthToken {
             user_id,
             token_type,
             expires,
+            valid: true,
         });
+    }
+
+    pub fn from_values(
+        id: i64,
+        user_id: i64,
+        token_type: TokenType,
+        expires: DateTime<Utc>,
+        valid: bool,
+    ) -> Self {
+        return Self {
+            id,
+            user_id,
+            token_type,
+            expires,
+            valid,
+        };
+    }
+
+    pub fn valid(&self) -> bool {
+        return self.valid;
     }
 
     pub fn id(&self) -> i64 {
         return self.id;
+    }
+
+    pub fn user_id(&self) -> i64 {
+        return self.user_id;
     }
 
     pub fn is_expired(&self) -> bool {
