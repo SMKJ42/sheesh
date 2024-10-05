@@ -92,7 +92,7 @@ where
         return Ok((session, refresh_secret, access_secret));
     }
 
-    pub fn verify_token(
+    pub fn verify_session_token(
         &self,
         token_id: i64,
         user_id: i64,
@@ -102,7 +102,27 @@ where
             .trusted_verify_refresh_token(token_id, user_id, user_token_atmpt)
     }
 
-    pub fn read_session(&self, id: i64) -> Result<Session, Box<dyn error::Error>> {
+    pub fn verify_access_token(
+        &self,
+        token_id: i64,
+        user_id: i64,
+        user_token_atmpt: &str,
+    ) -> Result<(), TokenManagerError> {
+        self.token_manager
+            .trusted_verify_access_token(token_id, user_id, user_token_atmpt)
+    }
+
+    pub fn verify_token(
+        &self,
+        token: AuthToken,
+        user_id: i64,
+        user_token_atmpt: &str,
+    ) -> Result<(), AuthTokenError> {
+        self.token_manager
+            .verify_token(token, user_id, user_token_atmpt)
+    }
+
+    pub fn get_session(&self, id: i64) -> Result<Session, Box<dyn error::Error>> {
         return self.harness.read(id);
     }
 

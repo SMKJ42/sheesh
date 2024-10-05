@@ -28,7 +28,7 @@ fn main() {
     loop {
         let user: MyUser = user_manager
             .create_user(
-                "test".to_string(),
+                i.to_string(),
                 "pwd".to_string(),
                 Roles::Admin.as_role(),
                 Some(MyPublicUserMetadata),
@@ -49,6 +49,24 @@ fn main() {
                 let (_refresh_secret, _access_secret) = session_manager
                     .create_new_refresh_token(session, user.id(), &refresh_secret)
                     .unwrap();
+
+                session_manager.invalidate_access_token(session).unwrap();
+
+                let access_secret = session_manager
+                    .create_new_access_token(&mut session, user.id())
+                    .unwrap();
+
+                let is_valid_access_token = session_manager.verify_access_token(
+                    session.access_token().unwrap(),
+                    user.id(),
+                    &access_secret,
+                );
+
+                let is_valid_refresh_token = session_manager.verify_session_token(
+                    session.refresh_token().unwrap(),
+                    user.id(),
+                    &refresh_secret,
+                );
 
                 match user_manager.logout(&session_manager, &user, &refresh_secret) {
                     Ok(()) => {}

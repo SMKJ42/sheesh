@@ -20,12 +20,13 @@ pub fn default_hash_fn<'a>(pwd: &'a str, salt: &'a str) -> Result<String, AuthTo
     let salt = SaltString::from_b64(salt);
     if let Ok(salt) = salt {
         // lowering params from the recommended could be useful for tokens that expire quickly
-        // let params = Params::new(12, 8, 1, 32)?;
+        let params = Params::new(12, 8, 1, 32);
         let res = Scrypt.hash_password_customized(
             pwd.as_bytes(),
             None,
             None,
-            Params::recommended(),
+            // Params::recommended(),
+            params.unwrap(),
             salt.as_salt(),
         );
         match res {

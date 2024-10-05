@@ -157,12 +157,12 @@ where
         Th: DbHarnessToken,
     {
         match user.session_id {
-            Some(session_id) => match session_manager.read_session(session_id) {
+            Some(session_id) => match session_manager.get_session(session_id) {
                 Ok(session) => {
                     match session.refresh_token() {
                         Some(refresh_token_id) => {
                             // ensure that the user has the authority to logout -- they have a valid session token
-                            match session_manager.verify_token(
+                            match session_manager.verify_session_token(
                                 refresh_token_id,
                                 user.id,
                                 user_token_atmpt,
