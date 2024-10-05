@@ -56,13 +56,13 @@ fn main() {
                     .create_new_access_token(&mut session, user.id())
                     .unwrap();
 
-                let is_valid_access_token = session_manager.verify_access_token(
+                let _is_valid_access_token = session_manager.verify_access_token(
                     session.access_token().unwrap(),
                     user.id(),
                     &access_secret,
                 );
 
-                let is_valid_refresh_token = session_manager.verify_session_token(
+                let _is_valid_refresh_token = session_manager.verify_session_token(
                     session.refresh_token().unwrap(),
                     user.id(),
                     &refresh_secret,

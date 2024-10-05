@@ -11,12 +11,7 @@ rusqlite = { version = "0.32.1",  features = [ "chrono" ] }
 r2d2_sqlite = "0.25.0"
 r2d2 = "0.8.10"
 
-serde = "1.0.210"
-serde_json = "1.0.128"
 pkcs5 = { version = "0.7.1", features = [ "pbes2" ] }
-
-[dev-dependecies]
-tokio = "1.40.0"
 
 [[example]]
 name = "basic"
