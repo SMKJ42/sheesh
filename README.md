@@ -5,7 +5,6 @@ Ever wanted to host your own authentication? No? well nobody really WANTs to. Bu
 Sheesh-auth does not follow any particular protocol, roast me.
 
 User passwords and refresh token secrets stored salted and hashed while access tokens are stored as plaintext.
-Session can currently live indefinitely.
 
 User data is extensible.
 

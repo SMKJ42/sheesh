@@ -77,14 +77,14 @@ impl DbHarnessSession for SqliteHarnessSession {
     fn create_table(&self) -> Result<(), Box<dyn error::Error>> {
         let connection = self.connection.get()?;
         connection.execute(
-            "CREATE TABLE IF NOT EXISTS \"sessions\" (
+            "CREATE TABLE IF NOT EXISTS sessions (
                     id INTEGER PRIMARY KEY,
                     user_id INTEGER NOT NULL,
                     refresh_token INTEGER NOT NULL UNIQUE,
                     access_token INTEGER NOT NULL UNIQUE,
                     FOREIGN KEY(user_id) REFERENCES user(id),
                     FOREIGN KEY(refresh_token) REFERENCES refresh_tokens(id),
-                    FOREIGN KEY(access_token) REFERENCES access_tokens(id);
+                    FOREIGN KEY(access_token) REFERENCES access_tokens(id)
             );",
             [],
         )?;

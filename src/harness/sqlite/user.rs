@@ -2,6 +2,7 @@ use std::{error, result};
 
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::named_params;
 
 use crate::{
     harness::DbHarnessUser,
@@ -23,12 +24,12 @@ impl<'a> SqliteHarnessUser<'a> {
         }
     }
 
-    fn with_public_cols(mut self, cols: Vec<&'a str>) -> Self {
+    pub fn with_public_cols(mut self, cols: Vec<&'a str>) -> Self {
         self.public_cols = cols;
         return self;
     }
 
-    fn with_private_cols(mut self, cols: Vec<&'a str>) -> Self {
+    pub fn with_private_cols(mut self, cols: Vec<&'a str>) -> Self {
         self.private_cols = cols;
         return self;
     }
@@ -42,20 +43,41 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
             .execute([id])?;
         return Ok(());
     }
+
     fn insert<Pu, Pr>(&self, user: &User<Pu, Pr>) -> Result<(), Box<dyn error::Error>>
     where
         Pu: PublicUserMeta,
         Pr: PrivateUserMeta,
     {
-        // let fields = repeat_fields(self.params());
-        // let vars = repeat_vars(self.params().len());
+        let my_params: String;
+        let my_named_params: String;
+        if self.public_cols.len() == 0 && self.private_cols.len() == 0 {
+            my_params = String::new();
+            my_named_params = String::new();
+        } else {
+            todo!();
+        }
 
-        // self.connection
-        //     .get()?
-        //     .prepare(format!("INSERT INTO users ({}) VALUES ({})", fields, vars).as_str())?
-        //     .execute(user.into_sqlite_params().as_slice())?;
+        //TODO: dynamically utilize the fields in the .public_meta and .private_meta
+        self.connection.get()?.execute(
+            format!(
+                "INSERT INTO users (id, session_id, username, secret, ban, groups, role{})
+                    VALUES (:id, :session_id, :username, :secret, :ban, :groups, :role{})",
+                my_params, my_named_params
+            )
+            .as_str(),
+            named_params! {
+                ":id": user.id(),
+                ":session_id": user.session_id(),
+                ":username": user.username(),
+                ":secret": user.secret(),
+                ":ban": user.is_banned(),
+                ":groups": user.groups(),
+                ":role": user.role()
+            },
+        )?;
 
-        todo!();
+        return Ok(());
     }
     fn read<Pu, Pr>(&self, id: i64) -> Result<Option<User<Pu, Pr>>, Box<dyn error::Error>>
     where
@@ -63,15 +85,24 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
         Pr: PrivateUserMeta,
     {
         let conn = self.connection.get()?;
-        let mut statement = conn.prepare("SELECT * FROM users WHERE id = ?")?;
-        let mut result = statement.query([id])?;
-        todo!();
-        // match result.next()? {
-        //     Some(row) => {
-        //         return User::<Pu, Pr>::from_sqlite_row(row);
-        //     }
-        //     None => return Ok(None),
-        // }
+        let res = conn.query_row("SELECT * FROM users WHERE id = ?", [id], |row| {
+            let id = row.get(0)?;
+            let session_id = row.get(1)?;
+            let username = row.get(2)?;
+            let secret = row.get(3)?;
+            let ban = row.get(4)?;
+            let groups = row.get(5)?;
+            let role = row.get(6)?;
+
+            return Ok(User::from_values(
+                id, session_id, username, secret, ban, groups, role, None, None,
+            ));
+        });
+
+        match res {
+            Ok(user) => Ok(Some(user)),
+            Err(err) => Err(err.into()),
+        }
     }
     fn update<Pu, Pr>(&self, user: &User<Pu, Pr>) -> Result<usize, Box<dyn error::Error>>
     where
@@ -79,15 +110,28 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
         Pr: PrivateUserMeta,
     {
         let conn = self.connection.get()?;
-        let mut statement = conn.prepare("UPDATE users SET XXXXXXXX WHERE id = ?")?;
-        todo!();
+        let res = conn.execute(
+            "UPDATE users SET 
+        session_id = :session_id,
+        username = :username,
+        ban = :ban,
+        groups = :groups,
+        role = :role
+        WHERE id = :id",
+            named_params! {
+                ":id": user.id(),
+                ":session_id": user.session_id(),
+                ":username": user.username(),
+                ":ban": user.is_banned(),
+                ":groups": user.groups(),
+                ":role": user.role()
+            },
+        );
 
-        // let res = statement.execute(user.into_sqlite_params().as_slice());
-
-        // match res {
-        // Ok(res) => Ok(res),
-        // Err(err) => Err(err.into()),
-        // }
+        match res {
+            Ok(res) => Ok(res),
+            Err(err) => Err(err.into()),
+        }
     }
 
     fn create_table(
@@ -95,7 +139,7 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
         sql_string: Option<String>,
     ) -> result::Result<(), Box<dyn error::Error>> {
         let default_stmt = format!(
-            "CREATE TABLE IF NOT EXISTS \"users\" (
+            "CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY,
                 session_id INTEGER,
                 username STRING NOT NULL UNIQUE,
@@ -125,27 +169,27 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
         return Ok(());
     }
 
-    fn ban(&self) -> result::Result<(), Box<dyn error::Error>> {
-        todo!()
-    }
+    // fn ban(&self) -> result::Result<(), Box<dyn error::Error>> {
+    //     todo!()
+    // }
 
-    fn insert_group(&self) -> result::Result<(), Box<dyn error::Error>> {
-        todo!()
-    }
+    // fn insert_group(&self) -> result::Result<(), Box<dyn error::Error>> {
+    //     todo!()
+    // }
 
-    fn remove_group(&self) -> result::Result<(), Box<dyn error::Error>> {
-        todo!()
-    }
+    // fn remove_group(&self) -> result::Result<(), Box<dyn error::Error>> {
+    //     todo!()
+    // }
 
-    fn update_private(&self) -> result::Result<(), Box<dyn error::Error>> {
-        todo!()
-    }
+    // fn update_private(&self) -> result::Result<(), Box<dyn error::Error>> {
+    //     todo!()
+    // }
 
-    fn update_public(&self) -> result::Result<(), Box<dyn error::Error>> {
-        todo!()
-    }
+    // fn update_public(&self) -> result::Result<(), Box<dyn error::Error>> {
+    //     todo!()
+    // }
 
-    fn write_role(&self) -> result::Result<(), Box<dyn error::Error>> {
-        todo!()
-    }
+    // fn write_role(&self) -> result::Result<(), Box<dyn error::Error>> {
+    //     todo!()
+    // }
 }

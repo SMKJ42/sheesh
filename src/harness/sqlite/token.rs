@@ -95,13 +95,13 @@ impl DbHarnessToken for SqliteHarnessToken {
         let connection = self.connection.get()?;
 
         connection.execute(
-            "CREATE TABLE IF NOT EXISTS \"refresh_tokens\" (
+            "CREATE TABLE IF NOT EXISTS refresh_tokens (
                     id INTEGER PRIMARY KEY,
                     user_id INTEGER NOT NULL,
                     secret STRING NOT NULL,
                     expires DATETIME NOT NULL,
                     valid BOOL NOT NULL,
-                    FOREIGN KEY(user_id) REFERENCES users(id);
+                    FOREIGN KEY(user_id) REFERENCES users(id)
             );",
             [],
         )?;
@@ -111,7 +111,7 @@ impl DbHarnessToken for SqliteHarnessToken {
         )?;
 
         connection.execute(
-            "CREATE TABLE IF NOT EXISTS \"access_tokens\" (
+            "CREATE TABLE IF NOT EXISTS access_tokens (
                     id INTEGER PRIMARY KEY NOT NULL,
                     user_id INTEGER NOT NULL,
                     token STRING NOT NULL,
@@ -133,7 +133,7 @@ impl DbHarnessToken for SqliteHarnessToken {
         let connection = self.connection.get()?;
 
         match connection.query_row(
-            "SELECT * FROM access_tokens WHERE id = :id",
+            "SELECT * FROM access_tokens WHERE id = :id;",
             named_params! {":id": id},
             |row| {
                 let user_id = row.get(1)?;
@@ -154,7 +154,7 @@ impl DbHarnessToken for SqliteHarnessToken {
         let connection = self.connection.get()?;
 
         match connection.query_row(
-            "SELECT * FROM refresh_tokens WHERE id = :id",
+            "SELECT * FROM refresh_tokens WHERE id = :id;",
             named_params! {":id": id},
             |row| {
                 let user_id = row.get(1)?;

@@ -57,13 +57,14 @@ pub trait DbHarnessUser {
         Pr: PrivateUserMeta;
 
     fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
-    fn write_role(&self) -> Result<(), Box<dyn error::Error>>;
-    fn insert_group(&self) -> Result<(), Box<dyn error::Error>>;
-    fn remove_group(&self) -> Result<(), Box<dyn error::Error>>;
-    // change signature to fn(pu: PublicUserMeta) -> SqlString ?
-    fn update_public(&self) -> Result<(), Box<dyn error::Error>>;
-    fn update_private(&self) -> Result<(), Box<dyn error::Error>>;
-    fn ban(&self) -> Result<(), Box<dyn error::Error>>;
+
+    // fn write_role(&self) -> Result<(), Box<dyn error::Error>>;
+    // fn insert_group(&self) -> Result<(), Box<dyn error::Error>>;
+    // fn remove_group(&self) -> Result<(), Box<dyn error::Error>>;
+    // // change signature to fn(pu: PublicUserMeta) -> SqlString ?
+    // fn update_public(&self) -> Result<(), Box<dyn error::Error>>;
+    // fn update_private(&self) -> Result<(), Box<dyn error::Error>>;
+    // fn ban(&self) -> Result<(), Box<dyn error::Error>>;
 }
 
 pub trait DbHarnessSession {

@@ -183,7 +183,7 @@ where
     // ewww....
     pub fn invalidate_token(&self, mut token: AuthToken) -> Result<(), Box<dyn error::Error>> {
         token.valid = false;
-        self.harness.update(&token);
+        self.harness.update(&token)?;
         return Ok(());
     }
 

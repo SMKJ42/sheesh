@@ -301,6 +301,30 @@ where
         });
     }
 
+    pub fn from_values(
+        id: i64,
+        session_id: Option<i64>,
+        username: String,
+        secret: String,
+        ban: bool,
+        groups: Groups,
+        role: Role,
+        public: Option<Pu>,
+        private: Option<Pr>,
+    ) -> Self {
+        return Self {
+            id,
+            session_id,
+            username,
+            secret,
+            ban,
+            groups,
+            role,
+            public,
+            private,
+        };
+    }
+
     pub fn id(&self) -> i64 {
         return self.id;
     }
@@ -434,6 +458,10 @@ pub struct Groups {
 impl Groups {
     pub fn new() -> Self {
         return Self { groups: Vec::new() };
+    }
+
+    pub fn from_vec(groups: Vec<Group>) -> Self {
+        return Self { groups };
     }
 }
 
