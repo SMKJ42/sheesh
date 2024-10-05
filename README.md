@@ -11,3 +11,5 @@ User data is extensible.
 Plug and play or custom hashing, salting, and id generating strategies.
 
 Plug and play or custom db harness for easy integration into a SQLite database.
+
+`cargo run --example basic --release`

@@ -5,14 +5,12 @@ use sheesh::user::{PrivateUserMeta, PublicUserMeta, Role, User};
 // the following trait impls create type safety for you across the application.
 pub enum Roles {
     Admin,
-    User,
 }
 
 impl Roles {
     pub fn to_string(&self) -> String {
         match self {
             Self::Admin => return String::from("admin"),
-            Self::User => return String::from("user"),
         }
     }
 
@@ -26,9 +24,6 @@ impl Display for Roles {
         match self {
             Self::Admin => {
                 write!(f, "admin")
-            }
-            Self::User => {
-                write!(f, "user")
             }
         }
     }

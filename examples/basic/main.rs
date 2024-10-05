@@ -70,7 +70,7 @@ fn main() {
 
                 match user_manager.logout(&session_manager, &user, &refresh_secret) {
                     Ok(()) => {}
-                    Err(err) => {}
+                    Err(_err) => {}
                 }
             }
             Err(_err) => {}
